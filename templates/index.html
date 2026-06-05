@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>Transpiling Qiskit – Demo interattiva</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        margin-bottom: 0.2rem;
+      }
+      .subtitle {
+        color: #555;
+        margin-bottom: 1.5rem;
+      }
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      }
+      .form-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 12px;
+      }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 150px;
+      }
+      label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      input[type="number"],
+      select {
+        padding: 6px 8px;
+        font-size: 0.95rem;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        background: #fff;
+      }
+      .btn-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      button {
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+      .btn-generate {
+        background: #2563eb;
+        color: white;
+      }
+      .btn-transpile {
+        background: #16a34a;
+        color: white;
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+      pre {
+        background: #111827;
+        color: #e5e7eb;
+        padding: 12px;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 0.8rem;
+        line-height: 1.2;
+      }
+      table.stats {
+        border-collapse: collapse;
+        margin-top: 8px;
+        font-size: 0.9rem;
+      }
+      table.stats th,
+      table.stats td {
+        border: 1px solid #ddd;
+        padding: 6px 10px;
+        text-align: left;
+      }
+      table.stats th {
+        background: #f3f4f6;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 800px) {
+        .columns {
+          grid-template-columns: 1fr;
+        }
+      }
+      textarea.hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Transpiling interattivo con Qiskit</h1>
+      <div class="subtitle">
+        Scegli il numero di qubit, genera un circuito casuale e prova diversi
+        parametri di transpile.
+      </div>
+
+      <form method="post">
+        <div class="card">
+          <h2>1. Parametri di input</h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="num_qubits">Numero di qubit</label>
+              <input
+                type="number"
+                id="num_qubits"
+                name="num_qubits"
+                min="1"
+                max="20"
+                value="{{ num_qubits }}"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="map_type">Coupling map</label>
+              <select id="map_type" name="map_type">
+                {% for key, val in map_options.items() %}
+                <option value="{{ key }}" {% if key == selected_map %}selected{% endif %}>
+                  {{ key }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="basis_gates">Basis gates</label>
+              <select id="basis_gates" name="basis_gates">
+                {% for key, val in basis_gates_options.items() %}
+                <option value="{{ key }}" {% if key == selected_basis %}selected{% endif %}>
+                  {{ key }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="layout_method">Layout method</label>
+              <select id="layout_method" name="layout_method">
+                {% for key, val in layout_options.items() %}
+                <option value="{{ key }}" {% if key == selected_layout %}selected{% endif %}>
+                  {{ key }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="routing_method">Routing method</label>
+              <select id="routing_method" name="routing_method">
+                {% for key, val in routing_options.items() %}
+                <option value="{{ key }}" {% if key == selected_routing %}selected{% endif %}>
+                  {{ key }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- QASM nascosto per mantenere il circuito tra una POST e l'altra -->
+          <textarea
+            class="hidden"
+            name="circuit_qasm"
+            id="circuit_qasm"
+          >{{ circuit_qasm|e }}</textarea>
+
+          <div class="btn-row">
+            <button type="submit" name="action" value="generate" class="btn-generate">
+              Genera circuito random
+            </button>
+            <button type="submit" name="action" value="transpile" class="btn-transpile">
+              Transpile
+            </button>
+          </div>
+        </div>
+
+        <div class="columns">
+          <div class="card">
+            <h2>2. Circuito originale</h2>
+            {% if original_circuit_text %}
+            <pre>{{ original_circuit_text }}</pre>
+            {% if original_stats %}
+            <table class="stats">
+              <tr>
+                <th>Qubit</th>
+                <th>Depth</th>
+                <th># Gates</th>
+                <th>CX depth</th>
+              </tr>
+              <tr>
+                <td>{{ original_stats.num_qubits }}</td>
+                <td>{{ original_stats.depth }}</td>
+                <td>{{ original_stats.size }}</td>
+                <td>{{ original_stats.cx_depth }}</td>
+              </tr>
+            </table>
+            {% endif %}
+            {% else %}
+            <p>Nessun circuito ancora generato. Clicca “Genera circuito random”.</p>
+            {% endif %}
+          </div>
+
+          <div class="card">
+            <h2>3. Circuito transpiled</h2>
+            {% if transpiled_circuit_text %}
+            <pre>{{ transpiled_circuit_text }}</pre>
+            {% if transpiled_stats %}
+            <table class="stats">
+              <tr>
+                <th>Qubit</th>
+                <th>Depth</th>
+                <th># Gates</th>
+                <th>CX depth</th>
+              </tr>
+              <tr>
+                <td>{{ transpiled_stats.num_qubits }}</td>
+                <td>{{ transpiled_stats.depth }}</td>
+                <td>{{ transpiled_stats.size }}</td>
+                <td>{{ transpiled_stats.cx_depth }}</td>
+              </tr>
+            </table>
+            {% endif %}
+            {% else %}
+            <p>
+              Nessun risultato di transpile ancora. Imposta i parametri e clicca
+              “Transpile”.
+            </p>
+            {% endif %}
+          </div>
+        </div>
+      </form>
+    </div>
+  </body>
+</html>

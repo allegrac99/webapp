@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Qubit2Qubit</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f3e8ff; }
+
+    .title-q2q{
+      font-family: "Courier New", Courier, monospace;
+      font-weight: 700;font-size: 56px
+    }
+
+    .btn-pink{
+      background-color:#fdd7f3;border-color:#fdd7f3;color:#000;
+    }
+    .btn-pink:hover{
+      background-color:#fbbfe9;border-color:#fbbfe9;color:#000;
+    }
+
+    .btn-darkblue{
+      background-color:#123a6f;border-color:#123a6f;color:#fff;
+    }
+    .btn-darkblue:hover{
+      background-color:#0d2b52;border-color:#0d2b52;color:#fff;
+    }
+
+    /* logos */
+    .top-logos img{
+      height: 54px;          /* cambia qui la dimensione */
+      width: auto;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container py-4">
+
+  <!-- LOGHI IN ALTO -->
+  <div class="top-logos d-flex justify-content-between align-items-center mb-3">
+    <img src="{{ url_for('static', filename='img/logo_unina.png') }}"
+         alt="Logo left">
+    <img src="{{ url_for('static', filename='img/logo_quasar.png') }}"
+         alt="Logo Quasar">
+  </div>
+
+  <h1 class="mb-4 text-center title-q2q">Qubit2Qubit</h1>
+  <p class="text-center mb-5">Choose what you want to do:</p>
+
+  <div class="row justify-content-center">
+    <!-- Transpile (NON TOCCARE: link e stile uguali) -->
+    <div class="col-md-4 mb-3">
+      <div class="card h-100 text-center">
+        <div class="card-body d-flex flex-column">
+          <h5 class="card-title">Transpile a quantum circuit</h5>
+          <p class="card-text flex-grow-1">
+            Generate a quantum circuit and explore transpilation stages!
+          </p>
+          <a href="{{ url_for('transpile_view') }}" class="btn btn-pink mt-2">Go!</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clifford synthesis -->
+    <div class="col-md-4 mb-3">
+      <div class="card h-100 text-center">
+        <div class="card-body d-flex flex-column">
+          <h5 class="card-title">Synthesize a Clifford operator</h5>
+          <p class="card-text flex-grow-1">
+            Synthesize Clifford operators: view Clifford tableaus and compare Clifford synthesizers!
+          </p>
+          <a href="{{ url_for('clifford_synthesis_view') }}" class="btn btn-darkblue mt-2">Go!</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

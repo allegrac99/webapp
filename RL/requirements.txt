@@ -1,0 +1,8 @@
+gymnasium==0.29.1
+matplotlib==3.7.2
+numpy==1.24.3
+qiskit==1.1.1
+qiskit_sat_synthesis==0.0.1
+sb3_contrib==2.3.0
+stable_baselines3==2.3.2
+torch==2.3.1

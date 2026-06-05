@@ -1,0 +1,1533 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Transpilation</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* ── Base ── */
+    body { background-color: #ffe6f2; }
+    .page-wrap { max-width: 1050px; margin: 0 auto; }
+    pre {
+      background: #fff7fb; padding: 12px; border-radius: 6px;
+      font-size: .9rem; margin-bottom: .75rem; overflow-x: auto;
+    }
+    .top-logos img { height: 54px; width: auto; object-fit: contain; }
+    .section-title { margin: 0; font-weight: 600; }
+
+    /* ── Buttons ── */
+    .btn-apply { background:#e7167f; border-color:#e7167f; color:#fff; }
+    .btn-apply:hover { background:#cc0669; border-color:#cc0669; color:#fff; }
+
+    /* ── Gate palette ── */
+    .palette { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+    .gate {
+      user-select:none; padding:6px 10px; border-radius:8px;
+      border:1px solid #cc0669; background:#fff; font-weight:700; cursor:grab;
+    }
+    .gate:active { cursor:grabbing; }
+    .tool {
+      user-select:none; padding:6px 10px; border-radius:8px;
+      border:1px solid #123a6f; background:#fff; font-weight:700; cursor:pointer;
+    }
+    .tool.active { background:#123a6f; color:#fff; }
+    .hint { font-size:.9rem; color:#6b2b4a; }
+    .editor-wrap {
+      overflow-x:auto; padding:10px;
+      background:#fff7fb; border-radius:10px; border:1px solid #f0b6d3;
+    }
+
+    /* ── Layout chips ── */
+    .layout-card {
+      background:#fff; border:1px solid #f0b6d3; border-radius:14px;
+      padding:14px; box-shadow:0 2px 10px rgba(0,0,0,.04); margin-top:10px;
+    }
+    .chip {
+      display:inline-flex; align-items:center; gap:8px; padding:6px 10px;
+      border-radius:999px; border:1px solid #f0b6d3; background:#fff7fb;
+      font-size:.9rem; margin:4px 6px 0 0; white-space:nowrap;
+    }
+    .chip .v { font-family:monospace; font-weight:700; color:#cc0669; }
+    .chip .arrow { color:#6b2b4a; font-weight:700; }
+    .chip .p {
+      font-weight:800; color:#123a6f; background:#e6f2ff;
+      border:1px solid #cfe6ff; border-radius:10px;
+      padding:2px 8px; min-width:28px; text-align:center;
+    }
+    .layout-bar { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .layout-bar .box {
+      width:38px; height:30px; border-radius:10px;
+      border:1px solid #f0b6d3; background:#fff7fb;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:800; color:#123a6f;
+    }
+    .layout-bar .label { width:100%; font-size:.85rem; color:#6b2b4a; margin-bottom:2px; }
+
+    /* ── Map ── */
+    .mini-card {
+      background:#fff; border:1px solid #f0b6d3; border-radius:14px;
+      padding:12px 12px 6px; margin-top:10px; box-shadow:0 2px 10px rgba(0,0,0,.03);
+    }
+    details summary { cursor:pointer; font-weight:700; color:#123a6f; margin:6px 0; }
+    .card-topbar {
+      display:flex; justify-content:space-between;
+      align-items:center; gap:12px; margin-bottom:.75rem;
+    }
+    .map-wrap {
+      margin-top:12px; background:#fff; border:1px solid #f0b6d3;
+      border-radius:14px; padding:10px; box-shadow:0 2px 10px rgba(0,0,0,.03);
+    }
+    .map-wrap-compact { margin-top:0; padding:10px; }
+    .map-wrap-compact #couplingSvg { height:180px; }
+    .map-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+    .map-title strong { color:#123a6f; }
+    .map-note { font-size:.85rem; color:#6b2b4a; }
+    #couplingSvg { width:100%; height:220px; display:block; }
+    #layoutMapSvg { width:100%; height:240px; display:block; margin-top:8px; }
+    .docline a { word-break:break-all; }
+    .current-circuit-wrap { margin-top:14px; padding:0 10px; }
+    .op-hit { cursor:grab; }
+    .op-hit:active { cursor:grabbing; }
+    .col-highlight { fill:#e6f2ff; stroke:#cfe6ff; stroke-width:1; opacity:.55; }
+    .col-highlight.bad { fill:#ffe6f2; stroke:#f0b6d3; opacity:.6; }
+    .ghost-label { font-family:monospace; font-size:12px; font-weight:900; fill:#123a6f; }
+
+    /* ── Progress stepper ── */
+    .learning-progress {
+      display:flex; border-radius:12px; overflow:hidden;
+      border:1px solid #f0b6d3; margin-bottom:24px; background:#fff;
+    }
+    .progress-step {
+      flex:1; padding:10px 6px; text-align:center;
+      font-size:.75rem; font-weight:700; color:#aaa;
+      border-right:1px solid #f0b6d3; transition:all .25s;
+      cursor:default; line-height:1.3;
+    }
+    .progress-step:last-child { border-right:none; }
+    .progress-step.done { background:#e6f2ff; color:#123a6f; }
+    .progress-step.active { background:#e7167f; color:#fff; }
+    .progress-step .step-num {
+      display:block; font-size:1rem; margin-bottom:2px;
+    }
+
+    /* ── Theory panel ── */
+    .theory-panel {
+      background:#f0f7ff; border-left:4px solid #123a6f;
+      border-radius:0 10px 10px 0; margin-bottom:16px; overflow:hidden;
+    }
+    .theory-header {
+      padding:11px 16px; cursor:pointer;
+      display:flex; justify-content:space-between; align-items:center;
+      font-weight:700; font-size:.9rem; color:#123a6f;
+      user-select:none; list-style:none;
+    }
+    .theory-header::-webkit-details-marker { display:none; }
+    .theory-header .theory-icon { font-size:1.1rem; margin-right:8px; }
+    .theory-chevron { font-size:.75rem; transition:transform .25s; }
+    details[open] .theory-chevron { transform:rotate(180deg); }
+    .theory-body {
+      padding:0 16px 14px 16px; font-size:.9rem;
+      line-height:1.7; color:#1a2a3a;
+    }
+    .theory-body p:last-child { margin-bottom:0; }
+    .theory-body strong { color:#cc0669; }
+    .theory-body code {
+      background:#ddeeff; color:#0a2a5e;
+      padding:1px 5px; border-radius:4px; font-size:.85rem;
+    }
+    .theory-body .key-concept {
+      background:#fff3e0; border-left:3px solid #ff9800;
+      padding:8px 12px; border-radius:0 6px 6px 0; margin:8px 0;
+      font-size:.88rem;
+    }
+
+    /* ── Prediction panel ── */
+    .prediction-panel {
+      background:#fffbe6; border:1px solid #ffe082;
+      border-radius:10px; padding:16px; margin-bottom:16px;
+    }
+    .prediction-panel h6 { color:#b45309; font-weight:700; }
+    .pred-input-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; }
+
+    /* ── Prediction result ── */
+    .pred-result-panel {
+      border-radius:10px; padding:14px 16px;
+      margin-bottom:14px; font-size:.92rem;
+    }
+    .pred-result-panel.correct {
+      background:#e8f5e9; border:1px solid #a5d6a7;
+    }
+    .pred-result-panel.wrong {
+      background:#fff3e0; border:1px solid #ffcc80;
+    }
+    .pred-result-panel .pred-badge {
+      font-weight:800; font-size:1.15rem;
+    }
+    .pred-result-panel .pred-explanation {
+      font-size:.87rem; color:#444; margin-top:6px; line-height:1.6;
+    }
+
+    /* ── Quiz panel ── */
+    .quiz-panel {
+      background:#fff; border:1px solid #e0c4f0;
+      border-radius:12px; padding:18px; margin-top:16px;
+    }
+    .quiz-panel h6 {
+      color:#6b2b4a; font-weight:700; margin-bottom:14px;
+      display:flex; align-items:center; gap:8px;
+    }
+    .quiz-item { margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #f0e6f8; }
+    .quiz-item:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+    .quiz-q { font-weight:600; color:#2d1a3a; margin-bottom:10px; font-size:.92rem; }
+    .quiz-options { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+    .quiz-option {
+      display:flex; align-items:flex-start; gap:8px;
+      padding:8px 12px; border-radius:8px; border:1px solid #e0d0f0;
+      cursor:pointer; transition:background .15s; font-size:.88rem;
+    }
+    .quiz-option:hover { background:#f8f0ff; }
+    .quiz-option input { margin-top:1px; flex-shrink:0; }
+    .quiz-option.correct-ans { background:#e8f5e9; border-color:#a5d6a7; }
+    .quiz-option.wrong-ans { background:#fce4ec; border-color:#f48fb1; }
+    .quiz-feedback {
+      padding:10px 12px; border-radius:8px; font-size:.87rem;
+      line-height:1.6; margin-top:6px;
+    }
+    .quiz-feedback.correct { background:#e8f5e9; color:#1b5e20; border:1px solid #a5d6a7; }
+    .quiz-feedback.wrong { background:#fff3e0; color:#6d3200; border:1px solid #ffcc80; }
+    .quiz-check { font-size:.78rem; }
+    .quiz-score {
+      text-align:center; padding:14px;
+      background:#f3e8ff; border-radius:10px; margin-top:12px;
+      font-weight:700; color:#6b2b4a; font-size:.95rem;
+    }
+
+    /* ── Processing overlay ── */
+    .processing-overlay {
+      position:fixed; inset:0; background:rgba(255,230,242,.65);
+      display:none; align-items:center; justify-content:center;
+      z-index:9999; backdrop-filter:blur(2px);
+    }
+    .processing-overlay.show { display:flex; }
+    .processing-card {
+      background:#fff; border:1px solid #f0b6d3; border-radius:16px;
+      padding:18px 22px; box-shadow:0 8px 30px rgba(0,0,0,.12);
+      text-align:center; min-width:260px;
+    }
+
+    html { scroll-behavior:auto !important; }
+    body.preload { visibility:hidden; }
+  </style>
+</head>
+
+<!-- Processing overlay -->
+<div id="processingOverlay" class="processing-overlay" aria-hidden="true">
+  <div class="processing-card">
+    <div class="spinner-border" role="status" aria-label="Loading"></div>
+    <div class="mt-3 fw-semibold">Processing…</div>
+    <div class="small text-muted mt-1">This may take a few seconds.</div>
+  </div>
+</div>
+
+<!-- Prediction modal (Bootstrap 5) -->
+<div class="modal fade" id="routingPredModal" tabindex="-1" aria-labelledby="routingPredModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#fff3e0; border-bottom:1px solid #ffe082;">
+        <h5 class="modal-title" id="routingPredModalLabel">🔮 Prima di applicare il routing…</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3 text-muted" style="font-size:.9rem;">
+          Fare previsioni prima di vedere i risultati è il modo più efficace per imparare.
+          Non ci sono risposte sbagliate — conta il ragionamento.
+        </p>
+
+        <div class="mb-4">
+          <label class="form-label fw-bold" style="color:#b45309;">
+            Q1 — Quanti gate SWAP pensi che verranno inseriti?
+          </label>
+          <input type="number" min="0" class="form-control" id="pred_swap_count" value="0" style="max-width:120px;">
+          <div class="form-text">Considera il coupling map scelto e il numero di gate CX nel circuito.</div>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label fw-bold" style="color:#b45309;">
+            Q2 — Rispetto al circuito originale, il depth dopo il routing…
+          </label>
+          <div class="d-flex flex-column gap-2 mt-2">
+            <label class="quiz-option" style="border:1px solid #e0d0f0;">
+              <input type="radio" name="pred_depth_change" value="increase"> Aumenterà (routing aggiunge overhead)
+            </label>
+            <label class="quiz-option" style="border:1px solid #e0d0f0;">
+              <input type="radio" name="pred_depth_change" value="same"> Resterà uguale (nessun SWAP necessario)
+            </label>
+            <label class="quiz-option" style="border:1px solid #e0d0f0;">
+              <input type="radio" name="pred_depth_change" value="decrease"> Diminuirà (il routing ottimizza il circuito)
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="background:#fffbe6; border-top:1px solid #ffe082;">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-apply" id="confirmRoutingPred">
+          Conferma previsione &amp; applica routing →
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<body class="preload">
+<div class="container py-4">
+
+  <div class="top-logos d-flex justify-content-between align-items-center mb-3">
+    <img src="{{ url_for('static', filename='img/logo_unina.png') }}" alt="Logo UniNA">
+    <img src="{{ url_for('static', filename='img/logo_quasar.png') }}" alt="Logo Quasar">
+  </div>
+
+  <div class="page-wrap">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2>Transpilation</h2>
+      <a href="{{ url_for('home') }}" class="btn btn-outline-secondary btn-sm">Back to Home</a>
+    </div>
+
+    <!-- ── Progress stepper ── -->
+    <div class="learning-progress" id="learningProgress" role="navigation" aria-label="Pipeline stages">
+      <div class="progress-step" data-section="editor" id="step-editor">
+        <span class="step-num">⚙️</span>Circuito
+      </div>
+      <div class="progress-step" data-section="target" id="step-target">
+        <span class="step-num">🔗</span>Topologia
+      </div>
+      <div class="progress-step" data-section="layout" id="step-layout">
+        <span class="step-num">📐</span>Layout
+      </div>
+      <div class="progress-step" data-section="routing" id="step-routing">
+        <span class="step-num">🗺️</span>Routing
+      </div>
+      <div class="progress-step" data-section="translation" id="step-translation">
+        <span class="step-num">🔤</span>Traduzione
+      </div>
+    </div>
+
+    <form method="post" id="mainForm" enctype="multipart/form-data">
+      <input type="hidden" name="circuit_json"      id="circuit_json"      value='{{ circuit_json|default("") }}'>
+      <input type="hidden" name="layout_list_str"   id="layout_list_str"   value="{{ layout_list_str }}">
+      <input type="hidden" name="layout_for_hash"   id="layout_for_hash"   value="{{ layout_for_hash|default('') }}">
+      <input type="hidden" name="builder_depth"     id="builder_depth_hidden" value="{{ builder_depth }}">
+      <input type="hidden" name="focus_section"     id="focus_section"     value="{{ focus_section|default('') }}">
+      <input type="hidden" name="routed_qasm_str"   id="routed_qasm_str"   value='{{ routed_qasm_str|default("") }}'>
+      <input type="hidden" name="routed_for_hash"   id="routed_for_hash"   value='{{ routed_for_hash|default("") }}'>
+
+      <!-- ════════════════════════════════════════
+           1. CIRCUIT EDITOR
+      ════════════════════════════════════════ -->
+      <div class="card mb-4" id="section-editor">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">1. Costruisci il tuo circuito</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm"
+                    name="action" value="clear_all" id="clearAllBtn">Clear all</button>
+          </div>
+
+          <!-- Theory panel -->
+          <details class="theory-panel" id="theory-editor">
+            <summary class="theory-header">
+              <span><span class="theory-icon">📚</span> Cosa stai costruendo?</span>
+              <span class="theory-chevron">▼</span>
+            </summary>
+            <div class="theory-body">
+              <p>
+                Un <strong>circuito quantistico</strong> è una sequenza di operazioni (gate) applicate a
+                <strong>qubit</strong>. Ogni qubit parte dallo stato |0⟩ e viene trasformato dai gate.
+              </p>
+              <p>
+                I gate a <strong>2 qubit</strong> (CX, SWAP) sono i più costosi da implementare sull'hardware
+                fisico — ogni SWAP equivale a 3 gate CX. La traspilazione si occupa di renderli compatibili
+                con i vincoli fisici del dispositivo.
+              </p>
+              <div class="key-concept">
+                <strong>💡 Suggerimento:</strong> Per vedere gli effetti del routing, costruisci un circuito con
+                almeno 2-3 gate CX tra qubit <em>non adiacenti</em> (es. q[0]-q[2] con coupling map "line").
+              </div>
+            </div>
+          </details>
+
+          {% if editor_error %}
+            <div class="alert alert-danger" role="alert">{{ editor_error }}</div>
+          {% endif %}
+
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label for="num_qubits" class="form-label">Numero di qubit</label>
+              <input type="number" min="1" class="form-control"
+                     id="num_qubits" name="num_qubits" value="{{ num_qubits }}">
+            </div>
+            <div class="col-md-9 d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-apply mt-3" id="applyEditorBtn">Apply</button>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="hint mb-2">
+            <ul class="mb-0">
+              <li>Trascina i <strong>gate a 1 qubit</strong> sulla griglia (si posizionano nella colonna libera più vicina).</li>
+              <li>Per i <strong>gate a 2 qubit</strong>: clicca <strong>2Q gates</strong>, scegli il gate, poi clicca i due qubit (control → target per CX/CY/CZ).</li>
+              <li>Puoi <strong>spostare</strong> i gate trascinandoli. Cliccali per <strong>rimuoverli</strong>.</li>
+            </ul>
+          </div>
+
+          <div class="palette">
+            <div class="gate" draggable="true" data-gate="id">I</div>
+            <div class="gate" draggable="true" data-gate="h">H</div>
+            <div class="gate" draggable="true" data-gate="x">X</div>
+            <div class="gate" draggable="true" data-gate="y">Y</div>
+            <div class="gate" draggable="true" data-gate="z">Z</div>
+            <div class="gate" draggable="true" data-gate="s">S</div>
+            <div class="gate" draggable="true" data-gate="sdg">S†</div>
+            <div class="gate" draggable="true" data-gate="t">T</div>
+            <div class="gate" draggable="true" data-gate="tdg">T†</div>
+            <div class="gate" draggable="true" data-gate="sx">SX</div>
+            <div class="gate" draggable="true" data-gate="sxdg">SX†</div>
+
+            <div class="ms-2 tool" id="twoQTool">2Q gates</div>
+            <select class="form-select form-select-sm" id="twoQGateSelect" style="width:auto;">
+              <option value="cx">CX</option>
+              <option value="cy">CY</option>
+              <option value="cz">CZ</option>
+              <option value="swap">SWAP</option>
+            </select>
+            <span class="hint ms-2" id="twoQStatus"></span>
+          </div>
+
+          <div class="editor-wrap">
+            <svg id="circuitSvg"></svg>
+          </div>
+
+          <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+            <input type="file" id="qasmFileInput" name="qasm_file" accept=".qasm,.txt" style="display:none;">
+            <button type="button" class="btn btn-outline-secondary" id="loadQasmBtn">
+              Carica (QASM)
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="saveQasmBtn">
+              Salva (QASM)
+            </button>
+
+            {% if show_qiskit %}
+              <button type="submit" class="btn btn-outline-secondary"
+                      name="action" value="hide_qiskit" id="hideBtn">
+                Nascondi versione Qiskit
+              </button>
+            {% else %}
+              <button type="submit" class="btn btn-apply"
+                      name="action" value="render_circuit" id="renderBtn">
+                Mostra versione Qiskit
+              </button>
+            {% endif %}
+          </div>
+
+          {% if original_circuit_text %}
+            <div class="current-circuit-wrap">
+              <hr>
+              <h6 class="mb-2">Circuito corrente</h6>
+              <pre>{{ original_circuit_text }}</pre>
+              {% if original_stats %}
+                <ul class="small mb-0">
+                  <li>Qubit: {{ original_stats.num_qubits }}</li>
+                  <li>Operazioni totali: {{ original_stats.size }}</li>
+                  <li>Depth: {{ original_stats.depth }}</li>
+                  <li>CX depth: {{ original_stats.cx_depth }}</li>
+                </ul>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           2. COUPLING MAP
+      ════════════════════════════════════════ -->
+      <div class="card mb-4" id="section-target">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">2. Vincoli di connettività</h5>
+            <span></span>
+          </div>
+
+          <details class="theory-panel" id="theory-target">
+            <summary class="theory-header">
+              <span><span class="theory-icon">🔗</span> Perché il coupling map è importante?</span>
+              <span class="theory-chevron">▼</span>
+            </summary>
+            <div class="theory-body">
+              <p>
+                In un vero processore quantistico, <strong>non tutti i qubit sono connessi fisicamente</strong>
+                tra loro. Il coupling map descrive quali coppie di qubit possono interagire direttamente
+                con gate a 2 qubit (come CX).
+              </p>
+              <p>
+                Ad esempio, con topologia <code>line</code> a 3 qubit, solo le coppie
+                <code>0–1</code> e <code>1–2</code> sono adiacenti.
+                Un gate CX tra <code>q[0]</code> e <code>q[2]</code> <em>non è eseguibile direttamente</em>
+                e richiederà gate SWAP intermedi.
+              </p>
+              <div class="key-concept">
+                <strong>💡 Pensa:</strong> Se scegli <em>ring</em> invece di <em>line</em>,
+                quanti gate SWAP ti aspetti in meno? Perché?
+              </div>
+            </div>
+          </details>
+
+          <div class="row g-3 align-items-start">
+            <div class="col-md-4">
+              <label for="map_type" class="form-label">Coupling map</label>
+              <select class="form-select" id="map_type" name="map_type">
+                {% for key, label in map_options.items() %}
+                  <option value="{{ key }}" {% if key == selected_map %}selected{% endif %}>
+                    {{ key|capitalize }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-8">
+              <div class="map-wrap map-wrap-compact">
+                <div class="map-title">
+                  <strong>Anteprima coupling map</strong>
+                  <span class="map-note" id="mapLegend"></span>
+                </div>
+                <svg id="couplingSvg" viewBox="0 0 900 220" preserveAspectRatio="xMidYMid meet"></svg>
+                <div class="map-note mt-1" id="mapNote"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           3. LAYOUT
+      ════════════════════════════════════════ -->
+      <div class="card mb-4" id="section-layout">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">3. Layout stage</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm"
+                    name="action" value="clear_layout" id="clearLayoutTop">Clear</button>
+          </div>
+
+          <details class="theory-panel" id="theory-layout">
+            <summary class="theory-header">
+              <span><span class="theory-icon">📐</span> Qubit logici vs qubit fisici</span>
+              <span class="theory-chevron">▼</span>
+            </summary>
+            <div class="theory-body">
+              <p>
+                Il layout stage decide <strong>quale qubit fisico corrisponde a quale qubit logico</strong>
+                del tuo circuito. Questa assegnazione ha un impatto enorme sul routing:
+                se mappi qubit che interagiscono spesso su posizioni fisiche adiacenti,
+                il routing dovrà inserire <em>meno</em> gate SWAP.
+              </p>
+              <p>
+                <code>TrivialLayout</code>: mappa q[0]→0, q[1]→1, … (nessuna ottimizzazione).<br>
+                <code>DenseLayout</code>: cerca la regione del coupling map più densamente connessa.<br>
+                <code>SabreLayout</code>: usa una simulazione del routing stesso per trovare la mappatura migliore.
+              </p>
+              <div class="key-concept">
+                <strong>💡 Pensa:</strong> Se il tuo circuito ha un CX tra q[0] e q[2], qual è
+                il layout ideale per <em>line</em> a 3 qubit?
+              </div>
+            </div>
+          </details>
+
+          {% if layout_error %}
+            <div class="alert alert-danger" role="alert">{{ layout_error }}</div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="layout_method" class="form-label">Metodo di layout</label>
+              <select class="form-select" id="layout_method" name="layout_method">
+                {% for key, val in layout_options.items() %}
+                  <option value="{{ key }}"
+                          data-doc="{{ layout_docs.get(key, '') }}"
+                          {% if key == selected_layout %}selected{% endif %}>
+                    {% if key == "none" %}None
+                    {% elif key == "custom" %}Custom
+                    {% else %}{{ key|capitalize }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="docline small mt-2">
+                Docs: <a id="layoutDocLink" href="#" target="_blank" rel="noopener">—</a>
+              </div>
+              <div class="hint mt-2" id="sabreLayoutHint" style="display:none;">
+                <strong>Nota:</strong> SabreLayout usa un'euristica routing-aware per trovare la migliore mappatura iniziale.
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-3" id="custom_layout_row" style="display:none;">
+            <div class="col-md-6">
+              <label for="custom_layout" class="form-label">Layout personalizzato</label>
+              <select class="form-select" id="custom_layout" name="custom_layout">
+                <option value="">-- seleziona layout --</option>
+                {% for layout in layout_permutations %}
+                  <option value="{{ layout }}" {% if layout == custom_layout_str %}selected{% endif %}>
+                    {{ layout }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button type="submit" name="action" value="apply_layout"
+                    class="btn btn-apply" id="applyLayoutBtn">Apply layout</button>
+            <button type="submit" name="action" value="compare_layout"
+                    class="btn btn-outline-secondary" id="compareLayoutBtn">Confronta metodi</button>
+          </div>
+
+          <div class="map-wrap" id="layoutMapWrap" style="display:none;">
+            <div class="map-title">
+              <strong>Layout sul coupling map</strong>
+              <span class="map-note">Dentro: indice fisico · Sopra: qubit logico mappato</span>
+            </div>
+            <svg id="layoutMapSvg" viewBox="0 0 900 240" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="map-note mt-1" id="layoutMapNote"></div>
+          </div>
+
+          {% if layout_pairs %}
+            <hr>
+            <div class="layout-card">
+              <h6 class="mb-2">Layout selezionato</h6>
+              <div class="hint mb-2">Qubit virtuali → posizioni fisiche:</div>
+              <div>
+                {% for v, p in layout_pairs %}
+                  <span class="chip">
+                    <span class="v">q[{{ v }}]</span>
+                    <span class="arrow">→</span>
+                    <span class="p">{{ p }}</span>
+                  </span>
+                {% endfor %}
+              </div>
+              <div class="layout-bar mt-3">
+                <div class="label"><strong>Posizioni fisiche (in ordine virtuale):</strong></div>
+                {% for v, p in layout_pairs %}
+                  <div class="box" title="q[{{v}}] → {{p}}">{{ p }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+
+          {% if layout_compare_results %}
+            <hr>
+            <h6 class="mb-2">Confronto metodi di layout</h6>
+            <div class="hint mb-2">Ogni metodo produce una mappatura diversa — nota come cambiano le assegnazioni:</div>
+            {% for item in layout_compare_results %}
+              <div class="mini-card">
+                <div class="d-flex justify-content-between align-items-center">
+                  <strong>{{ item.method|capitalize }}</strong>
+                  <span class="hint">virtuale → fisico</span>
+                </div>
+                <div class="mt-2">
+                  {% for v, p in item.layout_pairs %}
+                    <span class="chip">
+                      <span class="v">q[{{ v }}]</span>
+                      <span class="arrow">→</span>
+                      <span class="p">{{ p }}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           4. ROUTING
+      ════════════════════════════════════════ -->
+      <div class="card mb-4" id="section-routing">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">4. Routing stage</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm"
+                    name="action" value="clear_routing" id="clearRoutingTop">Clear</button>
+          </div>
+
+          <details class="theory-panel" id="theory-routing">
+            <summary class="theory-header">
+              <span><span class="theory-icon">🗺️</span> Come il routing risolve il problema di connettività</span>
+              <span class="theory-chevron">▼</span>
+            </summary>
+            <div class="theory-body">
+              <p>
+                Dopo il layout, ogni qubit logico ha una posizione fisica. Ma alcuni gate a 2 qubit
+                potrebbero cadere su qubit fisici <strong>non adiacenti</strong> nel coupling map.
+                Il router risolve questo inserendo gate <strong>SWAP</strong>, che scambiano
+                fisicamente lo stato di due qubit adiacenti, "avvicinando" i qubit necessari.
+              </p>
+              <p>
+                <code>BasicSwap</code>: inserisce SWAP greedy, senza lookahead — semplice ma spesso subottimale.<br>
+                <code>LookaheadSwap</code>: considera i prossimi gate prima di scegliere lo SWAP migliore.<br>
+                <code>SabreSwap</code>: usa un'euristica bidirezionale — generalmente il migliore dei tre.
+              </p>
+              <div class="key-concept">
+                <strong>⚠️ Costo degli SWAP:</strong> Ogni gate SWAP = 3 gate CX.
+                Un circuito con 2 SWAP inseriti ha 6 gate CX extra.
+                Il depth aumenta di almeno 3 per ogni SWAP in un layer.
+              </div>
+            </div>
+          </details>
+
+          {% if routing_error %}
+            <div class="alert alert-danger" role="alert">{{ routing_error }}</div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="routing_method" class="form-label">Metodo di routing</label>
+              <select class="form-select" id="routing_method" name="routing_method">
+                {% for key, val in routing_options.items() %}
+                  <option value="{{ key }}"
+                          data-doc="{{ routing_docs.get(key, '') }}"
+                          {% if key == selected_routing %}selected{% endif %}>
+                    {% if key == "none" %}None (nessun routing){% else %}{{ key|capitalize }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="docline small mt-2">
+                Docs: <a id="routingDocLink" href="#" target="_blank" rel="noopener">—</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <!-- Il click su questo pulsante viene intercettato da JS per mostrare prima la modale previsione -->
+            <button type="button" class="btn btn-apply" id="applyRoutingInterceptBtn">
+              Apply routing
+            </button>
+            <!-- Questo è il pulsante reale che viene triggerato dopo la previsione -->
+            <button type="submit" name="action" value="apply_routing"
+                    class="btn btn-apply d-none" id="applyRoutingRealBtn">Apply routing</button>
+
+            <button type="submit" name="action" value="compare_routing"
+                    class="btn btn-outline-secondary" id="compareRoutingBtn">Confronta metodi</button>
+          </div>
+
+          <!-- ── Prediction result (shown after routing if prediction exists) ── -->
+          <div id="predResultContainer" class="mt-3" style="display:none;"></div>
+
+          {% if routed_circuit_text %}
+            <hr>
+            <div>
+              <h6>Circuito dopo il routing</h6>
+              <pre>{{ routed_circuit_text }}</pre>
+
+              {% if routing_analysis_text and 'not configured' not in routing_analysis_text|lower %}
+                <div class="alert alert-secondary" role="alert">
+                  <strong>Analisi del routing (AI)</strong>
+                  <div class="small mt-1" style="white-space:pre-wrap;">{{ routing_analysis_text }}</div>
+                </div>
+              {% elif routing_analysis_text and 'not configured' in routing_analysis_text|lower %}
+                <div class="text-muted small mt-2">Analisi AI non disponibile.</div>
+              {% endif %}
+
+              {% if routed_stats %}
+                <ul class="small">
+                  <li>Qubit: {{ routed_stats.num_qubits }}</li>
+                  <li>Operazioni totali: {{ routed_stats.size }}</li>
+                  <li>Depth: {{ routed_stats.depth }}</li>
+                  <li>CX depth: {{ routed_stats.cx_depth }}</li>
+                  <li>Gate SWAP inseriti: <strong>{{ routed_swap_count }}</strong></li>
+                </ul>
+              {% endif %}
+
+              {% if routed_circuit_text_cx %}
+                <details>
+                  <summary>Mostra SWAP come 3 CX</summary>
+                  <pre>{{ routed_circuit_text_cx }}</pre>
+                  {% if routed_stats_cx %}
+                    <ul class="small">
+                      <li>Depth: {{ routed_stats_cx.depth }}</li>
+                      <li>CX depth: {{ routed_stats_cx.cx_depth }}</li>
+                      <li>Operazioni totali: {{ routed_stats_cx.size }}</li>
+                    </ul>
+                  {% endif %}
+                </details>
+              {% endif %}
+
+              <!-- ── Quiz post-routing ── -->
+              {% if routed_stats %}
+                <div class="quiz-panel" id="routingQuiz">
+                  <h6>🧠 Verifica la tua comprensione</h6>
+
+                  <!-- Q1: Costo SWAP in CX -->
+                  <div class="quiz-item" data-correct="a">
+                    <p class="quiz-q">
+                      Il routing ha inserito <strong>{{ routed_swap_count }}</strong> gate SWAP.
+                      Ogni SWAP equivale a 3 gate CX. Quanti gate CX <em>extra</em> vengono aggiunti?
+                    </p>
+                    <div class="quiz-options">
+                      {% set correct_cx = routed_swap_count * 3 %}
+                      {% set wrong1 = routed_swap_count * 2 %}
+                      {% set wrong2 = routed_swap_count + 2 %}
+                      <label class="quiz-option">
+                        <input type="radio" name="rq1" value="a"> {{ correct_cx }} CX extra
+                      </label>
+                      <label class="quiz-option">
+                        <input type="radio" name="rq1" value="b"> {{ wrong1 }} CX extra
+                      </label>
+                      <label class="quiz-option">
+                        <input type="radio" name="rq1" value="c"> {{ wrong2 }} CX extra
+                      </label>
+                      <label class="quiz-option">
+                        <input type="radio" name="rq1" value="d"> Nessun CX extra (SWAP è nativo)
+                      </label>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary quiz-check" type="button">Verifica</button>
+                    <div class="quiz-feedback" style="display:none;"></div>
+                  </div>
+
+                  <!-- Q2: Depth impact -->
+                  {% if original_stats %}
+                  <div class="quiz-item"
+                       data-correct="{% if routed_stats.depth > original_stats.depth %}a{% elif routed_stats.depth == original_stats.depth %}b{% else %}c{% endif %}">
+                    <p class="quiz-q">
+                      Il depth era <strong>{{ original_stats.depth }}</strong> e ora è
+                      <strong>{{ routed_stats.depth }}</strong>. Qual è la ragione principale di questa variazione?
+                    </p>
+                    <div class="quiz-options">
+                      {% if routed_stats.depth > original_stats.depth %}
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="a">
+                          I gate SWAP inseriti aggiungono layer extra al circuito
+                        </label>
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="b">
+                          Il routing ha rimosso dei gate per ottimizzare
+                        </label>
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="c">
+                          La traduzione in base gate aumenta il depth
+                        </label>
+                      {% elif routed_stats.depth == original_stats.depth %}
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="a">
+                          Il routing ha ottimizzato il parallelismo
+                        </label>
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="b">
+                          Il layout ha già posizionato i qubit in modo che nessun SWAP fosse necessario
+                        </label>
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="c">
+                          Il coupling map non ha vincoli di connettività
+                        </label>
+                      {% else %}
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="a">
+                          Il routing ha aggiunto gate SWAP che aumentano il depth
+                        </label>
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="b">
+                          Questo non può succedere — il routing non può ridurre il depth
+                        </label>
+                        <label class="quiz-option">
+                          <input type="radio" name="rq2" value="c">
+                          Il router ha riordinato i gate per maggior parallelismo, compensando l'overhead SWAP
+                        </label>
+                      {% endif %}
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary quiz-check" type="button">Verifica</button>
+                    <div class="quiz-feedback" style="display:none;"></div>
+                  </div>
+                  {% endif %}
+
+                  <!-- Q3: Strategia per ridurre SWAP -->
+                  <div class="quiz-item" data-correct="b">
+                    <p class="quiz-q">
+                      Se volessi ridurre il numero di SWAP inseriti, quale approccio sarebbe più efficace?
+                    </p>
+                    <div class="quiz-options">
+                      <label class="quiz-option">
+                        <input type="radio" name="rq3" value="a">
+                        Aggiungere più gate al circuito originale
+                      </label>
+                      <label class="quiz-option">
+                        <input type="radio" name="rq3" value="b">
+                        Scegliere un layout che mappa qubit interagenti su posizioni fisiche adiacenti
+                      </label>
+                      <label class="quiz-option">
+                        <input type="radio" name="rq3" value="c">
+                        Aumentare il numero di qubit nel circuito
+                      </label>
+                      <label class="quiz-option">
+                        <input type="radio" name="rq3" value="d">
+                        Usare un coupling map con meno connessioni
+                      </label>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary quiz-check" type="button">Verifica</button>
+                    <div class="quiz-feedback" style="display:none;"></div>
+                  </div>
+
+                  <div class="quiz-score" id="quizScore" style="display:none;"></div>
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          {% if routing_compare_results %}
+            <hr>
+            <h6 class="mb-2">Confronto metodi di routing</h6>
+
+            {% if routing_compare_analysis_text and 'not configured' not in routing_compare_analysis_text|lower %}
+              <div class="alert alert-secondary" role="alert">
+                <strong>Analisi comparativa (AI)</strong>
+                <div class="small mt-1" style="white-space:pre-wrap;">{{ routing_compare_analysis_text }}</div>
+              </div>
+            {% elif routing_compare_analysis_text and 'not configured' in routing_compare_analysis_text|lower %}
+              <div class="text-muted small mt-2">Analisi AI non disponibile.</div>
+            {% endif %}
+
+            {% for item in routing_compare_results %}
+              <div class="mini-card">
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                  <strong>{{ item.method|capitalize }}</strong>
+                  {% if item.docs %}
+                    <a class="btn btn-outline-secondary btn-sm" href="{{ item.docs }}"
+                       target="_blank" rel="noopener">Docs</a>
+                  {% else %}
+                    <button class="btn btn-outline-secondary btn-sm" disabled>Docs</button>
+                  {% endif %}
+                </div>
+                <div class="small text-muted mt-1">
+                  {% if item.stats %}
+                    SWAP: {{ item.swap_count if item.swap_count is not none else '—' }}
+                    · Depth: {{ item.stats.depth }}
+                    · Size: {{ item.stats.size }}
+                    · CX depth: {{ item.stats.cx_depth }}
+                  {% else %}
+                    SWAP: {{ item.swap_count if item.swap_count is not none else '—' }}
+                  {% endif %}
+                </div>
+                <pre class="mt-2">{{ item.circuit_text }}</pre>
+                {% if item.circuit_text_cx %}
+                  <details>
+                    <summary>Mostra SWAP come 3 CX</summary>
+                    <pre>{{ item.circuit_text_cx }}</pre>
+                  </details>
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════
+           5. TRANSLATION
+      ════════════════════════════════════════ -->
+      <div class="card mb-4" id="section-translation">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">5. Translation stage</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm"
+                    name="action" value="clear_translation" id="clearTranslationTop">Clear</button>
+          </div>
+
+          <details class="theory-panel" id="theory-translation">
+            <summary class="theory-header">
+              <span><span class="theory-icon">🔤</span> Tradurre nel linguaggio dell'hardware</span>
+              <span class="theory-chevron">▼</span>
+            </summary>
+            <div class="theory-body">
+              <p>
+                Ogni gate del tuo circuito (H, S, T, CX…) deve essere espresso come combinazione
+                di <strong>gate nativi</strong> supportati dall'hardware target.
+                Il <code>BasisTranslator</code> usa un grafo di equivalenze per trovare la
+                decomposizione corretta.
+              </p>
+              <p>
+                Ad esempio, nel basis <code>rz, sx, x, cx</code>:
+                <code>H = RZ(π) · SX · RZ(π/2)</code>,
+                e <code>T = RZ(π/4)</code>.
+              </p>
+              <div class="key-concept">
+                <strong>💡 Nota:</strong> La traduzione può aumentare significativamente il <em>size</em>
+                (numero totale di gate) ma di solito non il depth se le decomposizioni sono in parallelo.
+                Prova e confronta!
+              </div>
+            </div>
+          </details>
+
+          {% if translation_error %}
+            <div class="alert alert-danger" role="alert">{{ translation_error }}</div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="translation_basis" class="form-label">Basis gate set</label>
+              <select class="form-select" id="translation_basis" name="translation_basis">
+                {% for key, gates in translation_basis_options.items() %}
+                  <option value="{{ key }}" {% if key == selected_translation_basis %}selected{% endif %}>
+                    {% if gates %}({{ gates|join(", ") }}){% else %}(None){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="hint mt-2">
+                Usa <strong>BasisTranslator</strong>
+                (<a href="{{ docs['BasisTranslator'] }}" target="_blank" rel="noopener">Qiskit docs</a>).
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button type="submit" name="action" value="apply_translation"
+                    class="btn btn-apply" id="applyTranslationBtn">Apply translation</button>
+          </div>
+
+          {% if translated_circuit_text %}
+            <hr>
+            <h6>Dopo la traduzione</h6>
+            <pre>{{ translated_circuit_text }}</pre>
+            {% if translated_stats %}
+              <ul class="small">
+                <li>Qubit: {{ translated_stats.num_qubits }}</li>
+                <li>Operazioni totali: {{ translated_stats.size }}</li>
+                <li>Depth: {{ translated_stats.depth }}</li>
+                <li>CX depth: {{ translated_stats.cx_depth }}</li>
+              </ul>
+            {% endif %}
+
+            <!-- Mini-riflessione post-translation -->
+            {% if original_stats and translated_stats %}
+              <div class="theory-panel mt-3" style="border-left-color:#cc0669; background:#fff7fb;">
+                <div style="padding:11px 16px; font-weight:700; font-size:.88rem; color:#cc0669;">
+                  🔍 Rifletti sui risultati
+                </div>
+                <div class="theory-body pt-0">
+                  <p>
+                    Il circuito originale aveva <strong>{{ original_stats.size }}</strong> operazioni
+                    e depth <strong>{{ original_stats.depth }}</strong>.
+                    Dopo la traduzione: <strong>{{ translated_stats.size }}</strong> operazioni,
+                    depth <strong>{{ translated_stats.depth }}</strong>.
+                  </p>
+                  {% if translated_stats.size > original_stats.size %}
+                    <p>
+                      L'aumento delle operazioni è atteso: gate come H, T, S vengono decomposti
+                      in gate più primitivi (RZ, SX, X). Ogni decomposizione può richiedere
+                      2–4 gate nativi al posto di uno.
+                    </p>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<!-- Bootstrap 5 JS (per modal) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   PROGRESS STEPPER
+══════════════════════════════════════════════════════════ */
+(function(){
+  const sectionMap = {
+    "editor":      "step-editor",
+    "target":      "step-target",
+    "layout":      "step-layout",
+    "routing":     "step-routing",
+    "translation": "step-translation",
+  };
+  const order = ["editor","target","layout","routing","translation"];
+
+  // Determina lo "stadio più avanzato" completato
+  function detectProgress(){
+    // Se c'è il testo di traduzione: step 5 done
+    const hasTrans  = !!{{ 'true' if translated_circuit_text else 'false' }};
+    const hasRouted = !!{{ 'true' if (routed_circuit_text or routing_compare_results) else 'false' }};
+    const hasLayout = !!{{ 'true' if (layout_pairs or layout_compare_results) else 'false' }};
+    const hasCirc   = !!{{ 'true' if original_circuit_text else 'false' }};
+
+    if (hasTrans) return "translation";
+    if (hasRouted) return "routing";
+    if (hasLayout) return "layout";
+    if (hasCirc)  return "editor";
+    return "editor";
+  }
+
+  const active = detectProgress();
+  const activeIdx = order.indexOf(active);
+
+  order.forEach((s, i) => {
+    const el = document.getElementById(sectionMap[s]);
+    if (!el) return;
+    if (i < activeIdx) el.classList.add("done");
+    else if (i === activeIdx) el.classList.add("active");
+  });
+
+  // click su step → scroll alla sezione
+  document.querySelectorAll(".progress-step").forEach(el => {
+    el.addEventListener("click", () => {
+      const sec = el.dataset.section;
+      const target = document.getElementById(`section-${sec}`);
+      if (target) target.scrollIntoView({ behavior:"smooth", block:"start" });
+    });
+    el.style.cursor = "pointer";
+  });
+})();
+
+/* ══════════════════════════════════════════════════════════
+   THEORY PANELS — auto-open on first visit per section
+   (usa localStorage per ricordare se l'utente ha già visto)
+══════════════════════════════════════════════════════════ */
+(function(){
+  const panels = ["theory-editor","theory-target","theory-layout","theory-routing","theory-translation"];
+  panels.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const seen = localStorage.getItem(`theory_seen_${id}`);
+    if (!seen) {
+      el.setAttribute("open","");          // auto-open on first visit
+    }
+    el.addEventListener("toggle", () => {
+      localStorage.setItem(`theory_seen_${id}`, "1");
+    });
+  });
+})();
+
+/* ══════════════════════════════════════════════════════════
+   PREDICTION SYSTEM — routing
+══════════════════════════════════════════════════════════ */
+(function(){
+  const PRED_KEY = "routing_prediction";
+  const ORIG_DEPTH_KEY = "original_circuit_depth";
+
+  // Salva depth originale se disponibile
+  {% if original_stats %}
+  try { sessionStorage.setItem(ORIG_DEPTH_KEY, "{{ original_stats.depth }}"); } catch(e){}
+  {% endif %}
+
+  // Pulsante intercetta → mostra modale Bootstrap
+  const interceptBtn = document.getElementById("applyRoutingInterceptBtn");
+  const realBtn = document.getElementById("applyRoutingRealBtn");
+  const confirmBtn = document.getElementById("confirmRoutingPred");
+  const modal = new bootstrap.Modal(document.getElementById("routingPredModal"));
+
+  if (interceptBtn) {
+    interceptBtn.addEventListener("click", () => {
+      modal.show();
+    });
+  }
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", () => {
+      const swapPred = parseInt(document.getElementById("pred_swap_count")?.value || "0");
+      const depthPred = document.querySelector("input[name='pred_depth_change']:checked")?.value || "";
+
+      try {
+        sessionStorage.setItem(PRED_KEY, JSON.stringify({
+          swap: swapPred,
+          depth: depthPred,
+          timestamp: Date.now()
+        }));
+      } catch(e){}
+
+      modal.hide();
+      saveScrollY();
+      syncHidden();
+      realBtn.click();
+    });
+  }
+
+  // Mostra risultato della previsione se esiste
+  {% if routed_stats and routed_swap_count is not none %}
+  const container = document.getElementById("predResultContainer");
+  if (container) {
+    try {
+      const raw = sessionStorage.getItem(PRED_KEY);
+      if (raw) {
+        const pred = JSON.parse(raw);
+        const actualSwap = {{ routed_swap_count }};
+        const actualDepth = {{ routed_stats.depth }};
+        const origDepth = parseInt(sessionStorage.getItem(ORIG_DEPTH_KEY) || "0");
+
+        const swapCorrect = (pred.swap === actualSwap);
+
+        let depthActual = "same";
+        if (actualDepth > origDepth) depthActual = "increase";
+        else if (actualDepth < origDepth) depthActual = "decrease";
+        const depthCorrect = (pred.depth === depthActual);
+
+        const allCorrect = swapCorrect && depthCorrect;
+
+        const depthLabels = {
+          increase: "aumentato",
+          decrease: "diminuito",
+          same: "rimasto uguale"
+        };
+
+        let html = `
+          <div class="pred-result-panel ${allCorrect ? 'correct' : 'wrong'}">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span>${allCorrect ? '🎯' : '🔄'}</span>
+              <strong>${allCorrect ? 'Previsione corretta!' : 'Confronto previsione vs risultato reale'}</strong>
+            </div>
+            <div class="d-flex flex-wrap gap-3 mb-2">
+              <div>
+                <span class="text-muted" style="font-size:.82rem;">SWAP previsti</span><br>
+                <span class="pred-badge" style="color:${swapCorrect ? '#2e7d32' : '#e65100'};">${pred.swap}</span>
+                <span class="text-muted"> → reali: <strong>${actualSwap}</strong></span>
+                <span>${swapCorrect ? ' ✅' : ' ❌'}</span>
+              </div>
+              <div>
+                <span class="text-muted" style="font-size:.82rem;">Depth</span><br>
+                <span class="pred-badge" style="color:${depthCorrect ? '#2e7d32' : '#e65100'};">
+                  ${pred.depth ? depthLabels[pred.depth] || pred.depth : '(non risposto)'}
+                </span>
+                <span class="text-muted"> → è <strong>${depthLabels[depthActual]}</strong></span>
+                <span>${depthCorrect ? ' ✅' : ' ❌'}</span>
+              </div>
+            </div>`;
+
+        if (!swapCorrect || !depthCorrect) {
+          html += `<div class="pred-explanation">`;
+          if (!swapCorrect) {
+            if (actualSwap === 0) {
+              html += `<strong>0 SWAP inseriti:</strong> il layout ha già posizionato i qubit in modo ottimale per questo coupling map. `;
+            } else if (pred.swap < actualSwap) {
+              html += `<strong>${actualSwap} SWAP (più del previsto):</strong> alcuni gate a 2 qubit richiedevano più "spostamenti" intermedi di quanto stimato. `;
+            } else {
+              html += `<strong>${actualSwap} SWAP (meno del previsto):</strong> il metodo di routing è riuscito a trovare percorsi più efficienti. `;
+            }
+          }
+          if (!depthCorrect) {
+            if (depthActual === "increase") {
+              html += `<strong>Depth aumentato:</strong> ogni SWAP aggiunge almeno 1 layer di depth al circuito. `;
+            } else if (depthActual === "same") {
+              html += `<strong>Depth invariato:</strong> nessun SWAP necessario, oppure gli SWAP sono stati inseriti in layer già presenti. `;
+            }
+          }
+          html += `</div>`;
+        }
+
+        html += `</div>`;
+        container.innerHTML = html;
+        container.style.display = "block";
+
+        sessionStorage.removeItem(PRED_KEY);
+      }
+    } catch(e) { container.style.display = "none"; }
+  }
+  {% endif %}
+})();
+
+/* ══════════════════════════════════════════════════════════
+   QUIZ SYSTEM
+══════════════════════════════════════════════════════════ */
+(function(){
+  const EXPLANATIONS = {
+    rq1: {
+      a: "Corretto! Ogni gate SWAP decomposto richiede esattamente 3 gate CX. Questa è una delle ragioni per cui minimizzare i SWAP è fondamentale nella traspilazione.",
+      wrong: "Non corretto. Un gate SWAP equivale sempre a 3 gate CX — questa è una proprietà fondamentale dell'algebra dei circuiti quantistici."
+    },
+    rq2: {
+      a_increase: "Corretto! Ogni SWAP aggiunge almeno un layer di profondità al circuito. Con N SWAP, il depth può aumentare di O(N).",
+      b_same: "Corretto! Se il layout ha già posizionato i qubit in modo ottimale, il router non deve inserire SWAP e il depth rimane invariato.",
+      c_decrease: "Corretto! In casi particolari, il router può riordinare le operazioni per migliorare il parallelismo, compensando l'overhead degli SWAP.",
+      wrong_increase: "Non corretto. L'aumento del depth è direttamente causato dai gate SWAP inseriti — ogni SWAP occupa almeno un timestep nel circuito.",
+      wrong_same: "Non corretto. Se il depth è rimasto uguale, il layout ha già garantito adiacenza tra i qubit che interagiscono.",
+      wrong_decrease: "Non corretto. La riduzione del depth richiede che il routing riorganizzi le operazioni, compensando l'overhead."
+    },
+    rq3: {
+      b: "Corretto! Il layout è il fattore più importante: se i qubit che interagiscono frequentemente sono mappati su posizioni fisiche adiacenti, il router non deve inserire SWAP per avvicinarli.",
+      wrong: "Non corretto. Il modo più efficace per ridurre i SWAP è ottimizzare il layout — assegnare qubit logici a posizioni fisiche adiacenti quando interagiscono. Il numero di gate nel circuito originale, il numero di qubit, o un coupling map meno connesso non aiutano (anzi, peggiorano)."
+    }
+  };
+
+  let answered = {};
+
+  document.querySelectorAll(".quiz-check").forEach(btn => {
+    btn.addEventListener("click", function(){
+      const item = this.closest(".quiz-item");
+      if (!item) return;
+
+      const correctAns = item.dataset.correct;
+      const name = item.querySelector("input[type=radio]")?.name;
+      if (!name) return;
+
+      const selected = item.querySelector(`input[name="${name}"]:checked`);
+      if (!selected) {
+        this.closest(".quiz-item").querySelector(".quiz-feedback").textContent = "Seleziona una risposta prima di verificare.";
+        this.closest(".quiz-item").querySelector(".quiz-feedback").className = "quiz-feedback wrong";
+        this.closest(".quiz-item").querySelector(".quiz-feedback").style.display = "block";
+        return;
+      }
+
+      const val = selected.value;
+      const isCorrect = (val === correctAns);
+      answered[name] = isCorrect;
+
+      // Style options
+      item.querySelectorAll(".quiz-option").forEach(opt => {
+        const inp = opt.querySelector("input");
+        if (!inp) return;
+        opt.classList.remove("correct-ans","wrong-ans");
+        if (inp.value === correctAns) opt.classList.add("correct-ans");
+        else if (inp.value === val && !isCorrect) opt.classList.add("wrong-ans");
+        inp.disabled = true;
+      });
+      this.disabled = true;
+
+      // Feedback text
+      const fb = item.querySelector(".quiz-feedback");
+      let msg = "";
+      if (name === "rq1") {
+        msg = isCorrect ? EXPLANATIONS.rq1.a : EXPLANATIONS.rq1.wrong;
+      } else if (name === "rq2") {
+        msg = isCorrect ? (EXPLANATIONS.rq2[`${val}_${correctAns === val ? val : 'x'}`] || EXPLANATIONS.rq2[`a_increase`] || "") : (EXPLANATIONS.rq2[`wrong_{{ 'increase' if routed_stats and original_stats and routed_stats.depth > original_stats.depth else 'same' }}`] || "");
+        // simpler:
+        if (!msg) msg = isCorrect ? "Corretto! Ottimo ragionamento." : "Non corretto. Rileggi la teoria sul routing e riprova.";
+      } else if (name === "rq3") {
+        msg = isCorrect ? EXPLANATIONS.rq3.b : EXPLANATIONS.rq3.wrong;
+      }
+      fb.textContent = msg;
+      fb.className = `quiz-feedback ${isCorrect ? 'correct' : 'wrong'}`;
+      fb.style.display = "block";
+
+      updateScore();
+    });
+  });
+
+  function updateScore(){
+    const total = document.querySelectorAll(".quiz-item").length;
+    const done = Object.keys(answered).length;
+    if (done < total) return;
+    const correct = Object.values(answered).filter(Boolean).length;
+    const score = document.getElementById("quizScore");
+    if (!score) return;
+    const pct = Math.round((correct / total) * 100);
+    score.innerHTML = `
+      Risultato quiz: <strong>${correct}/${total}</strong> (${pct}%)
+      ${pct === 100 ? '🎉 Perfetto!' : pct >= 66 ? '👍 Ben fatto!' : '💪 Rileggi la teoria e riprova!'}
+    `;
+    score.style.display = "block";
+  }
+})();
+
+/* ══════════════════════════════════════════════════════════
+   DOCS LINK UPDATER
+══════════════════════════════════════════════════════════ */
+function setDocLinkFromSelect(selectId, linkId) {
+  const sel = document.getElementById(selectId);
+  const a = document.getElementById(linkId);
+  if (!sel || !a) return;
+  const opt = sel.options[sel.selectedIndex];
+  const url = opt?.dataset?.doc?.trim() || "";
+  if (!url) {
+    a.href = "#"; a.textContent = "—";
+    a.style.pointerEvents = "none"; a.style.opacity = "0.6";
+  } else {
+    a.href = url; a.textContent = "Consulta la documentazione!";
+    a.style.pointerEvents = "auto"; a.style.opacity = "1";
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   SCROLL PERSISTENCE
+══════════════════════════════════════════════════════════ */
+function saveScrollY() {
+  try { sessionStorage.setItem("scrollY", String(window.scrollY||0)); } catch(e){}
+}
+function restoreScrollYIfAny() {
+  try {
+    const y = sessionStorage.getItem("scrollY");
+    if (y !== null) {
+      sessionStorage.removeItem("scrollY");
+      const yy = parseInt(y,10);
+      if (!Number.isNaN(yy)) { window.scrollTo(0,yy); return true; }
+    }
+  } catch(e){}
+  return false;
+}
+
+function setFocus(sectionId) {
+  const h = document.getElementById("focus_section");
+  if (h) h.value = sectionId;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const restored = restoreScrollYIfAny();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove("preload")));
+  if (restored) return;
+
+  const focus = document.getElementById("focus_section")?.value?.trim() || "";
+  if (focus) {
+    const el = document.getElementById(`section-${focus}`);
+    if (el) el.scrollIntoView({ behavior:"auto", block:"start" });
+    return;
+  }
+
+  ["translation","routing","layout","editor"].forEach(sec => {
+    const err = document.querySelector(`#section-${sec} .alert-danger`);
+    if (err) { document.getElementById(`section-${sec}`).scrollIntoView({ behavior:"auto", block:"start" }); }
+  });
+});
+
+/* ══════════════════════════════════════════════════════════
+   SVG CIRCUIT EDITOR (identico all'originale)
+══════════════════════════════════════════════════════════ */
+let numQubits = parseInt(document.getElementById('num_qubits').value || "3");
+let cols = parseInt(document.getElementById('builder_depth_hidden').value || "10");
+const MIN_COLS = 10, EXTEND_STEP = 5;
+cols = Math.max(MIN_COLS, cols);
+
+const leftMargin=140, topMargin=30, colW=60, wireGap=55, gateW=40, gateH=26;
+let ops=[], nextOpId=1;
+let twoQMode=false, twoQPending=null;
+const svg=document.getElementById("circuitSvg");
+const twoQTool=document.getElementById("twoQTool");
+const twoQStatus=document.getElementById("twoQStatus");
+const twoQGateSelect=document.getElementById("twoQGateSelect");
+let dragState=null, suppressNextClick=false;
+
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+function ensureOpIds(){for(const op of ops){if(op.id===undefined||op.id===null)op.id=nextOpId++;else nextOpId=Math.max(nextOpId,(Number(op.id)||0)+1);}}
+function twoQGate(){return(twoQGateSelect?.value||"cx").toLowerCase();}
+function setTwoQStatus(){if(!twoQMode){twoQStatus.textContent="";return;}const g=twoQGate();const directed=(g!=="swap");if(!twoQPending)twoQStatus.textContent=directed?`${g.toUpperCase()}: click control`:"SWAP: click first qubit";else twoQStatus.textContent=directed?`${g.toUpperCase()}: control q[${twoQPending.a}] → click target`:`SWAP: first q[${twoQPending.a}] → click second`;}
+function snapFromPoint(clientX,clientY){const pt=svg.createSVGPoint();pt.x=clientX;pt.y=clientY;const sp=pt.matrixTransform(svg.getScreenCTM().inverse());return{col:clamp(Math.round((sp.x-leftMargin)/colW),0,cols-1),q:clamp(Math.round((sp.y-topMargin)/wireGap),0,numQubits-1)};}
+function getOpById(id){const n=Number(id);return ops.find(o=>Number(o.id)===n)||null;}
+function opAt(q,col,excludeId=null){for(const op of ops){if(excludeId!==null&&Number(op.id)===Number(excludeId))continue;if(op.col!==col)continue;if(!op.qubits||!Array.isArray(op.qubits))continue;if(op.qubits.length===1&&op.qubits[0]===q)return op;if(op.qubits.length===2&&(op.qubits[0]===q||op.qubits[1]===q))return op;}return null;}
+function removeOp(op){ops=ops.filter(o=>o!==op);}
+function colBlockedForRangeExcluding(col,qMin,qMax,excludeId=null){for(const op of ops){if(excludeId!==null&&Number(op.id)===Number(excludeId))continue;if(op.col!==col)continue;if(!op.qubits||!Array.isArray(op.qubits))continue;if(op.qubits.length===1){const q=op.qubits[0];if(q>=qMin&&q<=qMax)return true;}else if(op.qubits.length===2){const a=op.qubits[0],b=op.qubits[1];const lo=Math.min(a,b),hi=Math.max(a,b);if(!(hi<qMin||lo>qMax))return true;}}return false;}
+function occupied(q,col,excludeId=null){return colBlockedForRangeExcluding(col,q,q,excludeId);}
+function extendCols(extra=EXTEND_STEP){cols+=Math.max(1,extra);}
+function nearestFreeColForQubit(q,desiredCol,excludeId=null){desiredCol=clamp(desiredCol,0,cols-1);for(let d=0;d<cols;d++){const cR=desiredCol+d;if(cR>=0&&cR<cols&&!occupied(q,cR,excludeId))return cR;if(d>0){const cL=desiredCol-d;if(cL>=0&&cL<cols&&!occupied(q,cL,excludeId))return cL;}}const old=cols;extendCols();for(let c=old;c<cols;c++)if(!occupied(q,c,excludeId))return c;return null;}
+function nearestFreeColFor2Q(a,b,desiredCol,excludeId=null){desiredCol=clamp(desiredCol,0,cols-1);const lo=Math.min(a,b),hi=Math.max(a,b);for(let d=0;d<cols;d++){const cR=desiredCol+d;if(cR>=0&&cR<cols&&!colBlockedForRangeExcluding(cR,lo,hi,excludeId))return cR;if(d>0){const cL=desiredCol-d;if(cL>=0&&cL<cols&&!colBlockedForRangeExcluding(cL,lo,hi,excludeId))return cL;}}const old=cols;extendCols();for(let c=old;c<cols;c++)if(!colBlockedForRangeExcluding(c,lo,hi,excludeId))return c;return null;}
+function add1qFromPalette(gate,q,desiredCol){if(!colBlockedForRangeExcluding(desiredCol,q,q,null)){const existing=opAt(q,desiredCol,null);if(existing){if(existing.qubits.length===2)return false;removeOp(existing);}ops.push({id:nextOpId++,gate,qubits:[q],col:desiredCol});return true;}const c0=nearestFreeColForQubit(q,desiredCol,null);if(c0===null)return false;const existing2=opAt(q,c0,null);if(existing2){if(existing2.qubits.length===2)return false;removeOp(existing2);}ops.push({id:nextOpId++,gate,qubits:[q],col:c0});return true;}
+function add2q(gate,a,b,col){if(a===b)return false;const lo=Math.min(a,b),hi=Math.max(a,b);if(colBlockedForRangeExcluding(col,lo,hi,null))return false;ops.push({id:nextOpId++,gate,qubits:[a,b],col});return true;}
+function serialize(){return JSON.stringify({num_qubits:numQubits,depth:cols,ops});}
+function markDirty(){const h=document.getElementById("layout_for_hash");if(h)h.value="";const ll=document.getElementById("layout_list_str");if(ll)ll.value="";const rq=document.getElementById("routed_qasm_str");const rh=document.getElementById("routed_for_hash");if(rq)rq.value="";if(rh)rh.value="";}
+function syncHidden(){document.getElementById("circuit_json").value=serialize();document.getElementById("builder_depth_hidden").value=String(cols);}
+function loadFromHidden(){const hidden=document.getElementById("circuit_json").value;if(!hidden||!hidden.trim())return false;try{const obj=JSON.parse(hidden);numQubits=obj.num_qubits;cols=Math.max(MIN_COLS,parseInt(obj.depth||MIN_COLS));ops=Array.isArray(obj.ops)?obj.ops:[];ensureOpIds();document.getElementById("num_qubits").value=String(numQubits);return true;}catch(e){return false;}}
+function svgSetSize(){const width=leftMargin+cols*colW+40;const height=topMargin+(numQubits-1)*wireGap+60;svg.setAttribute("width",width);svg.setAttribute("height",height);svg.setAttribute("viewBox",`0 0 ${width} ${height}`);}
+function drawWireWithGaps(y,centers){const xStart=leftMargin;const xEnd=leftMargin+(cols-1)*colW+20;const gapHalf=gateW/2+4;let cur=xStart;for(const xc of centers){const g1=xc-gapHalf,g2=xc+gapHalf;if(g1>cur){const seg=document.createElementNS("http://www.w3.org/2000/svg","line");seg.setAttribute("x1",cur);seg.setAttribute("x2",g1);seg.setAttribute("y1",y);seg.setAttribute("y2",y);seg.setAttribute("stroke","#a24b79");seg.setAttribute("stroke-width","2");svg.appendChild(seg);}cur=Math.max(cur,g2);}if(cur<xEnd){const seg=document.createElementNS("http://www.w3.org/2000/svg","line");seg.setAttribute("x1",cur);seg.setAttribute("x2",xEnd);seg.setAttribute("y1",y);seg.setAttribute("y2",y);seg.setAttribute("stroke","#a24b79");seg.setAttribute("stroke-width","2");svg.appendChild(seg);}}
+function gateLabel(g){const gg=(g||"").toLowerCase();if(gg==="sdg")return"S†";if(gg==="tdg")return"T†";if(gg==="sxdg")return"SX†";if(gg==="id")return"I";return gg.toUpperCase();}
+function drawSwapSymbol(x,y){const grp=document.createElementNS("http://www.w3.org/2000/svg","g");const l1=document.createElementNS("http://www.w3.org/2000/svg","line");l1.setAttribute("x1",x-8);l1.setAttribute("y1",y-8);l1.setAttribute("x2",x+8);l1.setAttribute("y2",y+8);l1.setAttribute("stroke","#123a6f");l1.setAttribute("stroke-width","2");grp.appendChild(l1);const l2=document.createElementNS("http://www.w3.org/2000/svg","line");l2.setAttribute("x1",x-8);l2.setAttribute("y1",y+8);l2.setAttribute("x2",x+8);l2.setAttribute("y2",y-8);l2.setAttribute("stroke","#123a6f");l2.setAttribute("stroke-width","2");grp.appendChild(l2);return grp;}
+function drawTargetCircle(x,y,label){const grp=document.createElementNS("http://www.w3.org/2000/svg","g");const circ=document.createElementNS("http://www.w3.org/2000/svg","circle");circ.setAttribute("cx",x);circ.setAttribute("cy",y);circ.setAttribute("r","11");circ.setAttribute("fill","#ffffff");circ.setAttribute("stroke","#123a6f");circ.setAttribute("stroke-width","2");grp.appendChild(circ);if(label==="+"){const h=document.createElementNS("http://www.w3.org/2000/svg","line");h.setAttribute("x1",x-7);h.setAttribute("x2",x+7);h.setAttribute("y1",y);h.setAttribute("y2",y);h.setAttribute("stroke","#123a6f");h.setAttribute("stroke-width","2");grp.appendChild(h);const v=document.createElementNS("http://www.w3.org/2000/svg","line");v.setAttribute("x1",x);v.setAttribute("x2",x);v.setAttribute("y1",y-7);v.setAttribute("y2",y+7);v.setAttribute("stroke","#123a6f");v.setAttribute("stroke-width","2");grp.appendChild(v);}else{const t=document.createElementNS("http://www.w3.org/2000/svg","text");t.setAttribute("x",x);t.setAttribute("y",y+5);t.setAttribute("text-anchor","middle");t.setAttribute("font-family","monospace");t.setAttribute("font-size","14");t.setAttribute("font-weight","900");t.setAttribute("fill","#123a6f");t.textContent=label;grp.appendChild(t);}return grp;}
+function ensurePreviewGroup(){if(dragState&&dragState.previewG)return dragState.previewG;const g=document.createElementNS("http://www.w3.org/2000/svg","g");g.setAttribute("pointer-events","none");svg.appendChild(g);if(dragState)dragState.previewG=g;return g;}
+function clearPreviewGroup(){if(dragState&&dragState.previewG){dragState.previewG.remove();dragState.previewG=null;}}
+function drawGhostAt(clientX,clientY,labelText){const g=ensurePreviewGroup();let gg=g.querySelector("[data-preview='ghost']");if(!gg){gg=document.createElementNS("http://www.w3.org/2000/svg","g");gg.setAttribute("data-preview","ghost");gg.setAttribute("pointer-events","none");const bubble=document.createElementNS("http://www.w3.org/2000/svg","rect");bubble.setAttribute("rx","8");bubble.setAttribute("fill","#ffffff");bubble.setAttribute("stroke","#123a6f");bubble.setAttribute("stroke-width","2");bubble.setAttribute("opacity","0.95");bubble.setAttribute("data-ghost","bubble");gg.appendChild(bubble);const t=document.createElementNS("http://www.w3.org/2000/svg","text");t.classList.add("ghost-label");t.setAttribute("data-ghost","text");gg.appendChild(t);g.appendChild(gg);}const pt=svg.createSVGPoint();pt.x=clientX;pt.y=clientY;const sp=pt.matrixTransform(svg.getScreenCTM().inverse());const t=gg.querySelector("[data-ghost='text']");t.textContent=labelText;const padX=10,padY=6;const w=Math.max(24,labelText.length*7+padX*2),h=22;const bubble=gg.querySelector("[data-ghost='bubble']");bubble.setAttribute("width",w);bubble.setAttribute("height",h);const ox=14,oy=-28;const x=sp.x+ox,y=sp.y+oy;bubble.setAttribute("x",x);bubble.setAttribute("y",y);t.setAttribute("x",x+w/2);t.setAttribute("y",y+15);t.setAttribute("text-anchor","middle");}
+function clearGhost(){if(!dragState||!dragState.previewG)return;const gg=dragState.previewG.querySelector("[data-preview='ghost']");if(gg)gg.remove();}
+
+function draw(){
+  svgSetSize(); svg.innerHTML="";
+  const bg=document.createElementNS("http://www.w3.org/2000/svg","rect");
+  bg.setAttribute("x","0");bg.setAttribute("y","0");bg.setAttribute("width","100%");bg.setAttribute("height","100%");bg.setAttribute("fill","#fff");svg.appendChild(bg);
+  const gapsByQ=Array.from({length:numQubits},()=>[]);
+  for(const op of ops){if(op.qubits.length===1){const q=op.qubits[0];const x=leftMargin+op.col*colW;if(q>=0&&q<numQubits)gapsByQ[q].push(x);}}
+  for(let q=0;q<numQubits;q++)gapsByQ[q].sort((a,b)=>a-b);
+  for(let q=0;q<numQubits;q++){const y=topMargin+q*wireGap;const label=document.createElementNS("http://www.w3.org/2000/svg","text");label.setAttribute("x",12);label.setAttribute("y",y+5);label.setAttribute("text-anchor","start");label.setAttribute("font-family","monospace");label.setAttribute("font-size","14");label.textContent=`q[${q}]: |0\u27E9`;svg.appendChild(label);drawWireWithGaps(y,gapsByQ[q]);}
+  for(let c=0;c<cols;c++){const x=leftMargin+c*colW;const guide=document.createElementNS("http://www.w3.org/2000/svg","line");guide.setAttribute("x1",x);guide.setAttribute("x2",x);guide.setAttribute("y1",topMargin-20);guide.setAttribute("y2",topMargin+(numQubits-1)*wireGap+20);guide.setAttribute("stroke","#f3c0d8");guide.setAttribute("stroke-width","1");guide.setAttribute("opacity","0.35");svg.appendChild(guide);}
+  for(const op of ops){const c=op.col;const x=leftMargin+c*colW;const gOp=document.createElementNS("http://www.w3.org/2000/svg","g");gOp.setAttribute("data-op-id",String(op.id));gOp.classList.add("op-hit");if(op.qubits.length===2){const a=op.qubits[0],b=op.qubits[1];const y1=topMargin+a*wireGap,y2=topMargin+b*wireGap;const hit=document.createElementNS("http://www.w3.org/2000/svg","rect");hit.setAttribute("x",x-(gateW/2+10));hit.setAttribute("y",Math.min(y1,y2)-16);hit.setAttribute("width",gateW+20);hit.setAttribute("height",Math.abs(y2-y1)+32);hit.setAttribute("fill","transparent");gOp.appendChild(hit);const vl=document.createElementNS("http://www.w3.org/2000/svg","line");vl.setAttribute("x1",x);vl.setAttribute("x2",x);vl.setAttribute("y1",y1);vl.setAttribute("y2",y2);vl.setAttribute("stroke","#123a6f");vl.setAttribute("stroke-width","2");gOp.appendChild(vl);const gg=(op.gate||"").toLowerCase();if(gg==="swap"){gOp.appendChild(drawSwapSymbol(x,y1));gOp.appendChild(drawSwapSymbol(x,y2));}else{const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("cx",x);dot.setAttribute("cy",y1);dot.setAttribute("r","6");dot.setAttribute("fill","#123a6f");gOp.appendChild(dot);if(gg==="cx")gOp.appendChild(drawTargetCircle(x,y2,"+"));else if(gg==="cy")gOp.appendChild(drawTargetCircle(x,y2,"Y"));else gOp.appendChild(drawTargetCircle(x,y2,"Z"));}}else{const q=op.qubits[0];const y=topMargin+q*wireGap;const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");rect.setAttribute("x",x-gateW/2);rect.setAttribute("y",y-gateH/2);rect.setAttribute("width",gateW);rect.setAttribute("height",gateH);rect.setAttribute("rx","6");rect.setAttribute("fill","#ffffff");rect.setAttribute("stroke","#cc0669");rect.setAttribute("stroke-width","2");gOp.appendChild(rect);const text=document.createElementNS("http://www.w3.org/2000/svg","text");text.setAttribute("x",x);text.setAttribute("y",y+5);text.setAttribute("text-anchor","middle");text.setAttribute("font-weight","800");text.setAttribute("font-family","sans-serif");text.setAttribute("font-size","14");text.setAttribute("fill","#cc0669");text.textContent=gateLabel(op.gate);text.style.pointerEvents="none";gOp.appendChild(text);}svg.appendChild(gOp);}
+}
+
+function handleSvgClick(e){if(suppressNextClick){suppressNextClick=false;return;}if(dragState&&dragState.started)return;const{col,q}=snapFromPoint(e.clientX,e.clientY);const existing=opAt(q,col);if(existing){removeOp(existing);twoQPending=null;setTwoQStatus();markDirty();draw();syncHidden();return;}if(twoQMode){if(!twoQPending){twoQPending={a:q};setTwoQStatus();return;}else{const a=twoQPending.a,b=q;const g=twoQGate();const c0=nearestFreeColFor2Q(a,b,col,null);if(c0===null){alert("No free space.");return;}if(!add2q(g,a,b,c0)){alert("Cannot place 2Q gate.");return;}twoQPending=null;twoQMode=false;twoQTool.classList.remove("active");setTwoQStatus();markDirty();draw();syncHidden();}}}
+function handleDropOnSvg(e){e.preventDefault();const gate=e.dataTransfer.getData("text/gate");if(!gate)return;const{q,col}=snapFromPoint(e.clientX,e.clientY);if(!add1qFromPalette(gate,q,col)){alert("Cannot place gate.");return;}markDirty();draw();syncHidden();}
+function startInternalDrag(e,opId){const op=getOpById(opId);if(!op||twoQMode)return;dragState={opId:Number(opId),pointerId:e.pointerId,started:false,startX:e.clientX,startY:e.clientY,opSnapshot:{col:op.col,qubits:[...op.qubits]},opType:op.qubits.length,previewG:null};try{svg.setPointerCapture(e.pointerId);}catch{}e.preventDefault();}
+function updateInternalDrag(e){if(!dragState)return;const dx=e.clientX-dragState.startX,dy=e.clientY-dragState.startY;if(!dragState.started&&Math.hypot(dx,dy)>3)dragState.started=true;if(!dragState.started)return;const op=getOpById(dragState.opId);if(!op)return;const{q,col}=snapFromPoint(e.clientX,e.clientY);if(op.qubits.length===1){const c0=nearestFreeColForQubit(q,col,op.id);if(c0!==null){const g=ensurePreviewGroup();g.innerHTML="";const x=leftMargin+c0*colW,y=topMargin+q*wireGap;const r=document.createElementNS("http://www.w3.org/2000/svg","rect");r.setAttribute("x",x-gateW/2);r.setAttribute("y",y-gateH/2);r.setAttribute("width",gateW);r.setAttribute("height",gateH);r.setAttribute("rx","6");r.setAttribute("fill","none");r.setAttribute("stroke","#123a6f");r.setAttribute("stroke-width","2");r.setAttribute("stroke-dasharray","4 3");g.appendChild(r);}drawGhostAt(e.clientX,e.clientY,gateLabel(op.gate));}else{const a=op.qubits[0],b=op.qubits[1];const c0=nearestFreeColFor2Q(a,b,col,op.id);drawGhostAt(e.clientX,e.clientY,(op.gate||"").toUpperCase());}}
+function endInternalDrag(e){if(!dragState)return;const op=getOpById(dragState.opId);const didDrag=!!dragState.started;clearPreviewGroup();try{svg.releasePointerCapture(dragState.pointerId);}catch{}if(didDrag&&op){const{q,col}=snapFromPoint(e.clientX,e.clientY);if(op.qubits.length===1){const c0=nearestFreeColForQubit(q,col,op.id);if(c0!==null){op.qubits=[q];op.col=c0;markDirty();draw();syncHidden();suppressNextClick=true;}else{op.col=dragState.opSnapshot.col;op.qubits=[...dragState.opSnapshot.qubits];draw();}}else{const a=op.qubits[0],b=op.qubits[1];const c0=nearestFreeColFor2Q(a,b,col,op.id);if(c0!==null){op.col=c0;markDirty();draw();syncHidden();suppressNextClick=true;}else{op.col=dragState.opSnapshot.col;draw();}}}dragState=null;}
+
+svg.addEventListener("pointerdown",(e)=>{if(e.button!==undefined&&e.button!==0)return;const tgt=e.target;const g=tgt?.closest?.("[data-op-id]");if(!g)return;startInternalDrag(e,g.getAttribute("data-op-id"));});
+svg.addEventListener("pointermove",(e)=>updateInternalDrag(e));
+svg.addEventListener("pointerup",(e)=>endInternalDrag(e));
+svg.addEventListener("pointercancel",(e)=>endInternalDrag(e));
+document.querySelectorAll(".gate").forEach(g=>{g.addEventListener("dragstart",(e)=>e.dataTransfer.setData("text/gate",g.dataset.gate));});
+svg.addEventListener("dragover",(e)=>e.preventDefault());
+svg.addEventListener("drop",handleDropOnSvg);
+svg.addEventListener("click",handleSvgClick);
+twoQTool.addEventListener("click",()=>{twoQMode=!twoQMode;twoQPending=null;twoQTool.classList.toggle("active",twoQMode);setTwoQStatus();});
+twoQGateSelect.addEventListener("change",()=>{if(twoQMode){twoQPending=null;setTwoQStatus();}});
+document.getElementById("applyEditorBtn").addEventListener("click",()=>{const nq=parseInt(document.getElementById("num_qubits").value||"3");numQubits=Math.max(1,nq);ops=ops.filter(op=>{if(!op.qubits||!Array.isArray(op.qubits))return false;if(op.qubits.length===2){const a=op.qubits[0],b=op.qubits[1];return a>=0&&a<numQubits&&b>=0&&b<numQubits&&a!==b;}else{return op.qubits[0]>=0&&op.qubits[0]<numQubits;}});ensureOpIds();twoQMode=false;twoQPending=null;twoQTool.classList.remove("active");setTwoQStatus();markDirty();draw();syncHidden();drawCouplingMap();});
+
+/* ══════════════════════════════════════════════════════════
+   COUPLING MAP + LAYOUT MAP (identico all'originale)
+══════════════════════════════════════════════════════════ */
+const couplingSel=document.getElementById("map_type");
+const couplingSvg=document.getElementById("couplingSvg");
+const mapLegend=document.getElementById("mapLegend");
+const mapNote=document.getElementById("mapNote");
+const layoutMapWrap=document.getElementById("layoutMapWrap");
+const layoutMapSvg=document.getElementById("layoutMapSvg");
+const layoutMapNote=document.getElementById("layoutMapNote");
+function svgEl(name){return document.createElementNS("http://www.w3.org/2000/svg",name);}
+function clearSvg(s){s.innerHTML="";}
+function drawDefs(s){const defs=svgEl("defs");const grad=svgEl("linearGradient");grad.setAttribute("id","edgeGrad");grad.setAttribute("x1","0");grad.setAttribute("y1","0");grad.setAttribute("x2","1");grad.setAttribute("y2","0");const s1=svgEl("stop");s1.setAttribute("offset","0%");s1.setAttribute("stop-color","#cc0669");s1.setAttribute("stop-opacity","0.55");const s2=svgEl("stop");s2.setAttribute("offset","100%");s2.setAttribute("stop-color","#123a6f");s2.setAttribute("stop-opacity","0.55");grad.appendChild(s1);grad.appendChild(s2);defs.appendChild(grad);const filter=svgEl("filter");filter.setAttribute("id","softShadow");filter.setAttribute("x","-20%");filter.setAttribute("y","-20%");filter.setAttribute("width","140%");filter.setAttribute("height","140%");const feDrop=svgEl("feDropShadow");feDrop.setAttribute("dx","0");feDrop.setAttribute("dy","2");feDrop.setAttribute("stdDeviation","2");feDrop.setAttribute("flood-color","#000");feDrop.setAttribute("flood-opacity","0.18");filter.appendChild(feDrop);defs.appendChild(filter);s.appendChild(defs);}
+function edge(s,x1,y1,x2,y2){const path=svgEl("path");const mx=(x1+x2)/2,my=(y1+y2)/2,dx=x2-x1,dy=y2-y1,len=Math.max(1,Math.hypot(dx,dy)),nx=-dy/len,ny=dx/len,bend=18;path.setAttribute("d",`M ${x1} ${y1} Q ${mx+nx*bend} ${my+ny*bend} ${x2} ${y2}`);path.setAttribute("fill","none");path.setAttribute("stroke","url(#edgeGrad)");path.setAttribute("stroke-width","3");path.setAttribute("opacity","0.85");path.setAttribute("stroke-linecap","round");s.appendChild(path);}
+function node(s,x,y,physLabel,logicalLabel=null){const g=svgEl("g");const c=svgEl("circle");c.setAttribute("cx",x);c.setAttribute("cy",y);c.setAttribute("r","18");c.setAttribute("fill","#ffffff");c.setAttribute("stroke","#123a6f");c.setAttribute("stroke-width","3");c.setAttribute("filter","url(#softShadow)");g.appendChild(c);const t=svgEl("text");t.setAttribute("x",x);t.setAttribute("y",y+6);t.setAttribute("text-anchor","middle");t.setAttribute("font-family","monospace");t.setAttribute("font-size","14");t.setAttribute("font-weight","900");t.setAttribute("fill","#cc0669");t.textContent=physLabel;g.appendChild(t);if(logicalLabel!==null&&logicalLabel!==""){const u=svgEl("text");u.setAttribute("x",x);u.setAttribute("y",y-26);u.setAttribute("text-anchor","middle");u.setAttribute("font-family","monospace");u.setAttribute("font-size","12");u.setAttribute("font-weight","900");u.setAttribute("fill","#123a6f");u.textContent=logicalLabel;g.appendChild(u);}s.appendChild(g);}
+function bbox(pts){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of pts){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}if(!isFinite(minX))return{minX:0,minY:0,maxX:1,maxY:1,w:1,h:1};return{minX,minY,maxX,maxY,w:(maxX-minX)||1,h:(maxY-minY)||1};}
+function fitAndCenter(pts,boxX,boxY,boxW,boxH,pad=22){const innerX=boxX+pad,innerY=boxY+pad,innerW=Math.max(10,boxW-2*pad),innerH=Math.max(10,boxH-2*pad);const b=bbox(pts);const sx=innerW/b.w,sy=innerH/b.h,sc=Math.min(sx,sy);const scaledW=b.w*sc,scaledH=b.h*sc;const tx=innerX+(innerW-scaledW)/2-b.minX*sc,ty=innerY+(innerH-scaledH)/2-b.minY*sc;return pts.map(p=>({x:p.x*sc+tx,y:p.y*sc+ty}));}
+function lineLayoutNorm(n){if(n<=1)return[{x:.5,y:.5}];const pts=[];for(let i=0;i<n;i++){const t=(n===1)?0:i/(n-1);pts.push({x:t,y:.5+.07*Math.sin(t*Math.PI-Math.PI/2)});}return pts;}
+function circleLayoutNorm(n){const pts=[];for(let i=0;i<n;i++){const a=-Math.PI/2+(2*Math.PI*i)/n;pts.push({x:.5+.35*Math.cos(a),y:.5+.35*Math.sin(a)});}return pts;}
+function drawMapInto(s,type,n,legendEl,noteEl,overlayPhysToLogical=null){clearSvg(s);drawDefs(s);if(n<=1){if(noteEl)noteEl.textContent="Con 1 qubit, i vincoli di connettività non sono rilevanti.";node(s,450,110,"0",overlayPhysToLogical?(overlayPhysToLogical[0]??""):null);return;}const isLayout=(s===layoutMapSvg);const bgX=14,bgY=18,bgW=872,bgH=isLayout?204:184;const bg=svgEl("rect");bg.setAttribute("x",String(bgX));bg.setAttribute("y",String(bgY));bg.setAttribute("width",String(bgW));bg.setAttribute("height",String(bgH));bg.setAttribute("rx","16");bg.setAttribute("fill","#fff7fb");bg.setAttribute("stroke","#f0b6d3");bg.setAttribute("stroke-width","2");s.appendChild(bg);const t=(type||"none").toLowerCase();let ptsNorm=[];if(t==="line"){if(noteEl)noteEl.textContent="Connettività nearest-neighbor (bidirezionale)";ptsNorm=lineLayoutNorm(n);}else if(t==="ring"){if(noteEl)noteEl.textContent="Nearest-neighbor + arco di chiusura (bidirezionale)";ptsNorm=circleLayoutNorm(n);}else{if(noteEl)noteEl.textContent="Nessun vincolo di connettività";ptsNorm=circleLayoutNorm(n);}const pts=fitAndCenter(ptsNorm,bgX,bgY,bgW,bgH,24);if(t==="line"){for(let i=0;i<n-1;i++)edge(s,pts[i].x,pts[i].y,pts[i+1].x,pts[i+1].y);}else if(t==="ring"){for(let i=0;i<n;i++){const j=(i+1)%n;edge(s,pts[i].x,pts[i].y,pts[j].x,pts[j].y);}}else if(t==="full"){for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)edge(s,pts[i].x,pts[i].y,pts[j].x,pts[j].y);}for(let p=0;p<n;p++){const logical=overlayPhysToLogical?(overlayPhysToLogical[p]??null):null;node(s,pts[p].x,pts[p].y,String(p),logical);}}
+function parseLayoutListStr(){const s=(document.getElementById("layout_list_str")?.value||"").trim();if(!s)return null;try{return JSON.parse(s);}catch{try{return Function(`"use strict";return(${s});`)();}catch{return null;}}}
+function drawCouplingMap(){const n=Math.max(1,parseInt(document.getElementById("num_qubits").value||"1"));drawMapInto(couplingSvg,(couplingSel?.value||"none").toLowerCase(),n,mapLegend,mapNote,null);}
+function drawLayoutMapIfAvailable(){const n=Math.max(1,parseInt(document.getElementById("num_qubits").value||"1"));const ll=parseLayoutListStr();const hashOk=((document.getElementById("layout_for_hash")?.value||"").trim()!=="");if(!ll||!Array.isArray(ll)||ll.length!==n||!hashOk){layoutMapWrap.style.display="none";return;}const physToLogical=Array.from({length:n},()=>"");for(let v=0;v<n;v++){const p=ll[v];if(Number.isInteger(p)&&p>=0&&p<n)physToLogical[p]=`q[${v}]`;}layoutMapWrap.style.display="block";drawMapInto(layoutMapSvg,(couplingSel?.value||"none").toLowerCase(),n,null,layoutMapNote,physToLogical);}
+function invalidateOnMapChange(){["layout_for_hash","layout_list_str","routed_qasm_str","routed_for_hash"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});}
+
+/* ── Layout UI ── */
+function toggleCustomLayoutRow(){const v=document.getElementById("layout_method")?.value;const row=document.getElementById("custom_layout_row");if(row)row.style.display=(v==="custom")?"flex":"none";}
+function toggleSabreHint(){const v=document.getElementById("layout_method")?.value;const h=document.getElementById("sabreLayoutHint");if(h)h.style.display=(v==="sabre")?"block":"none";}
+
+document.addEventListener("DOMContentLoaded",()=>{
+  loadFromHidden(); ensureOpIds(); setTwoQStatus(); draw(); syncHidden();
+  setDocLinkFromSelect("layout_method","layoutDocLink");
+  setDocLinkFromSelect("routing_method","routingDocLink");
+  toggleCustomLayoutRow(); toggleSabreHint();
+  drawCouplingMap(); drawLayoutMapIfAvailable();
+
+  document.getElementById("layout_method")?.addEventListener("change",()=>{toggleCustomLayoutRow();toggleSabreHint();setDocLinkFromSelect("layout_method","layoutDocLink");});
+  document.getElementById("routing_method")?.addEventListener("change",()=>setDocLinkFromSelect("routing_method","routingDocLink"));
+  couplingSel?.addEventListener("change",()=>{invalidateOnMapChange();drawCouplingMap();drawLayoutMapIfAvailable();});
+  const nq=document.getElementById("num_qubits");
+  nq?.addEventListener("change",()=>{drawCouplingMap();drawLayoutMapIfAvailable();});
+  nq?.addEventListener("input",()=>{drawCouplingMap();drawLayoutMapIfAvailable();});
+});
+
+/* ── Action buttons ── */
+document.querySelectorAll('button[name="action"]').forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    saveScrollY();
+    const act=btn.value;
+    if(["render_circuit","hide_qiskit","clear_all"].includes(act))setFocus("editor");
+    else if(["apply_layout","compare_layout","clear_layout"].includes(act))setFocus("layout");
+    else if(["apply_routing","compare_routing","clear_routing"].includes(act))setFocus("routing");
+    else if(["apply_translation","clear_translation"].includes(act))setFocus("translation");
+    syncHidden();
+  });
+});
+document.getElementById("mainForm").addEventListener("submit",()=>{saveScrollY();syncHidden();});
+
+/* ── Save / Load QASM ── */
+function qasmFromBuilderState(){const opsSorted=[...ops].sort((a,b)=>{const ca=a.col??0,cb=b.col??0;if(ca!==cb)return ca-cb;return(a.qubits?.[0]??0)-(b.qubits?.[0]??0);});let out=['OPENQASM 2.0;','include "qelib1.inc";',`qreg q[${numQubits}];`];for(const op of opsSorted){const g=(op.gate||"").toLowerCase();const qs=op.qubits||[];if(qs.length===1){const q=qs[0];if(g==="id"){}else if(["h","x","y","z","s","sdg","t","tdg","sx","sxdg"].includes(g))out.push(`${g} q[${q}];`);else throw new Error(`Unsupported: ${g}`);}else if(qs.length===2){const a=qs[0],b=qs[1];if(["cx","cy","cz","swap"].includes(g))out.push(`${g} q[${a}],q[${b}];`);else throw new Error(`Unsupported 2Q: ${g}`);}}return out.join("\n")+"\n";}
+function downloadText(filename,text){const blob=new Blob([text],{type:"text/plain"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
+document.getElementById("saveQasmBtn")?.addEventListener("click",()=>{try{downloadText("circuit.qasm",qasmFromBuilderState());}catch(e){alert(`Save failed: ${e?.message||e}`);}});
+const loadQasmBtn=document.getElementById("loadQasmBtn");
+const qasmFileInput=document.getElementById("qasmFileInput");
+loadQasmBtn?.addEventListener("click",()=>qasmFileInput?.click());
+qasmFileInput?.addEventListener("change",()=>{if(!qasmFileInput.files?.length)return;saveScrollY();setFocus("editor");syncHidden();let act=document.getElementById("action_hidden_load_qasm");if(!act){act=document.createElement("input");act.type="hidden";act.name="action";act.id="action_hidden_load_qasm";act.value="load_qasm";document.getElementById("mainForm").appendChild(act);}else{act.value="load_qasm";}document.getElementById("mainForm").submit();});
+
+/* ── Processing overlay ── */
+(function(){const overlay=document.getElementById("processingOverlay");const form=document.getElementById("mainForm");if(!overlay||!form)return;let timer=null;function show(){overlay.classList.add("show");overlay.setAttribute("aria-hidden","false");}function hide(){overlay.classList.remove("show");overlay.setAttribute("aria-hidden","true");}window.addEventListener("pageshow",()=>{hide();if(timer){clearTimeout(timer);timer=null;}});form.addEventListener("submit",()=>{if(timer)clearTimeout(timer);timer=setTimeout(show,2000);});document.querySelectorAll('button[name="action"]').forEach(btn=>{btn.addEventListener("click",()=>{const act=btn.value||"";if(["clear_all"].includes(act))return;if(timer)clearTimeout(timer);timer=setTimeout(show,2000);});});})();
+</script>
+{% include "chat_widget.html" %}
+</body>
+</html>

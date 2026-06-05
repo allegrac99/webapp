@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Synthesis (Operator)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #a8c8ff; }
+    .page-wrap{ max-width: 1100px; margin: 0 auto; }
+    pre{ background:#fff7fb; padding:12px; border-radius:6px; font-size:.9rem; overflow-x:auto; }
+    .section-title{ margin:0; font-weight:600; }
+    .btn-apply{ background:#e7167f; border-color:#e7167f; color:#fff; }
+    .btn-apply:hover{ background:#cc0669; border-color:#cc0669; color:#fff; }
+    .palette{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+    .gate{ user-select:none; padding:6px 10px; border-radius:8px; border:1px solid #cc0669; background:#fff; font-weight:700; cursor:grab; }
+    .gate:active{ cursor:grabbing; }
+    .tool{ user-select:none; padding:6px 10px; border-radius:8px; border:1px solid #123a6f; background:#fff; font-weight:700; cursor:pointer; }
+    .tool.active{ background:#123a6f; color:#fff; }
+    .hint{ font-size:.9rem; color:#6b2b4a; }
+    .editor-wrap{ overflow-x:auto; padding:10px; background:#fff7fb; border-radius:10px; border:1px solid #f0b6d3; }
+    .card-topbar{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:.75rem; }
+    .map-wrap{ margin-top:12px; background:#fff; border:1px solid #f0b6d3; border-radius:14px; padding:10px; box-shadow:0 2px 10px rgba(0,0,0,0.03); }
+    .map-title{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+    .map-title strong{ color:#123a6f; }
+    .map-note{ font-size:.85rem; color:#6b2b4a; }
+    #couplingSvgOp{ width:100%; height:220px; display:block; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .processing-overlay{ position:fixed; inset:0; background:rgba(243,232,255,.65); display:none; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(2px); }
+    .processing-overlay.show{ display:flex; }
+    .processing-card{ background:#fff; border:1px solid #f0b6d3; border-radius:16px; padding:18px 22px; box-shadow:0 8px 30px rgba(0,0,0,.12); text-align:center; min-width:260px; }
+    html{ scroll-behavior:auto !important; }
+    body.preload{ visibility:hidden; }
+  </style>
+</head>
+
+<div id="processingOverlay" class="processing-overlay" aria-hidden="true">
+  <div class="processing-card">
+    <div class="spinner-border" role="status" aria-label="Loading"></div>
+    <div class="mt-3 fw-semibold">Processing…</div>
+    <div class="small text-muted mt-1">This may take a few seconds.</div>
+  </div>
+</div>
+
+<body class="preload">
+<div class="container py-4">
+  <div class="page-wrap">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2>Synthesis (Operator)</h2>
+      <a href="{{ url_for('home') }}" class="btn btn-outline-secondary btn-sm">Back to Home</a>
+    </div>
+
+    <form method="post" id="mainForm" enctype="multipart/form-data">
+      <input type="hidden" name="focus_section" id="focus_section" value="{{ focus_section|default('operator') }}">
+
+      {% if op_error %}
+        <div class="alert alert-danger" role="alert">{{ op_error }}</div>
+      {% endif %}
+
+      <input type="hidden" name="op_circuit_json" id="op_circuit_json" value='{{ op_circuit_json|default("") }}'>
+      <input type="hidden" name="op_builder_depth" id="op_builder_depth_hidden" value="{{ op_builder_depth|default(10) }}">
+
+      <div class="card mb-4" id="operator">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">Build circuit</h5>
+            <span></span>
+          </div>
+
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">Number of qubits</label>
+              <input type="number" min="1" class="form-control" id="op_num_qubits" name="op_num_qubits" value="{{ op_num_qubits|default(3) }}">
+            </div>
+            <div class="col-md-9 d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-apply mt-3" id="op_applyEditorBtn">Apply</button>
+
+              <input type="file" id="op_qasmFileInput" name="op_qasm_file" accept=".qasm,.txt" style="display:none;">
+              <button type="button" class="btn btn-outline-secondary mt-3" id="op_loadQasmBtn">Load circuit (QASM)</button>
+              <button type="button" class="btn btn-outline-secondary mt-3" id="op_saveQasmBtn">Save circuit (QASM)</button>
+
+              <button type="submit" class="btn btn-apply mt-3" name="action" value="op_render_circuit">
+                Display Qiskit version
+              </button>
+              <button type="submit" class="btn btn-outline-secondary mt-3" name="action" value="op_generate_operator">
+                Generate operator
+              </button>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="hint mb-2">
+            <ul class="mb-0">
+              <li>Drag & drop <strong>single-qubit gates</strong> (nearest free column).</li>
+              <li>For <strong>2Q gates</strong>: click <strong>2Q gates</strong>, pick the gate, then click two qubits (control → target for CX/CY/CZ).</li>
+              <li>Drag existing gates to move them.</li>
+              <li>Click a gate to remove it.</li>
+            </ul>
+          </div>
+
+          <div class="palette" id="op_palette">
+            <div class="gate" draggable="true" data-gate="id">I</div>
+            <div class="gate" draggable="true" data-gate="h">H</div>
+            <div class="gate" draggable="true" data-gate="x">X</div>
+            <div class="gate" draggable="true" data-gate="y">Y</div>
+            <div class="gate" draggable="true" data-gate="z">Z</div>
+            <div class="gate" draggable="true" data-gate="s">S</div>
+            <div class="gate" draggable="true" data-gate="sdg">S†</div>
+            <div class="gate" draggable="true" data-gate="t">T</div>
+            <div class="gate" draggable="true" data-gate="tdg">T†</div>
+            <div class="gate" draggable="true" data-gate="sx">SX</div>
+            <div class="gate" draggable="true" data-gate="sxdg">SX†</div>
+
+            <div class="ms-2 tool" id="op_twoQTool">2Q gates</div>
+            <select class="form-select form-select-sm" id="op_twoQGateSelect" style="width:auto;">
+              <option value="cx">CX</option>
+              <option value="cy">CY</option>
+              <option value="cz">CZ</option>
+              <option value="swap">SWAP</option>
+            </select>
+            <span class="hint ms-2" id="op_twoQStatus"></span>
+          </div>
+
+          <div class="editor-wrap">
+            <svg id="op_circuitSvg"></svg>
+          </div>
+
+          {% if op_circuit_text %}
+            <div class="mt-3">
+              <hr>
+              <h6 class="mb-2">Current circuit</h6>
+              <pre class="mb-2">{{ op_circuit_text }}</pre>
+              {% if op_stats %}
+                <ul class="small mb-0">
+                  <li>Qubits: {{ op_stats.num_qubits }}</li>
+                  <li>Size (operations): {{ op_stats.size }}</li>
+                  <li>Depth: {{ op_stats.depth }}</li>
+                  <li>CX depth: {{ op_stats.cx_depth }}</li>
+                </ul>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          {% if op_operator_text %}
+            <hr>
+            <h6 class="mb-2">Operator matrix (unitary)</h6>
+            <pre class="mono">{{ op_operator_text }}</pre>
+          {% endif %}
+
+          <hr>
+          <h6 class="section-title" style="font-size:1.05rem;">Connectivity-aware synthesis</h6>
+
+          <div class="row g-3 mt-1">
+            <div class="col-md-4">
+              <label class="form-label">Coupling map</label>
+              <select class="form-select" id="op_map_type" name="op_map_type">
+                {% for key, label in map_options.items() %}
+                  <option value="{{ key }}" {% if key == op_selected_map %}selected{% endif %}>{{ key|capitalize }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Routing method</label>
+              <select class="form-select" id="op_routing_method" name="op_routing_method">
+                {% for key, val in routing_options.items() %}
+                  <option value="{{ key }}" {% if key == op_selected_routing %}selected{% endif %}>
+                    {% if key == "none" %}None{% else %}{{ key|capitalize }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Basis gate set (optional)</label>
+              <select class="form-select" id="op_translation_basis" name="op_translation_basis">
+                {% for key, gates in translation_basis_options.items() %}
+                  <option value="{{ key }}" {% if key == op_selected_translation_basis %}selected{% endif %}>
+                    {% if gates %}({{ gates|join(", ") }}){% else %}(None){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-apply" name="action" value="op_apply_synthesis" id="op_applySynthesisBtn">
+              Apply synthesis
+            </button>
+          </div>
+
+          {% if op_synth_circuit_text %}
+            <hr>
+            <h6>After synthesis</h6>
+            <pre>{{ op_synth_circuit_text }}</pre>
+            {% if op_synth_stats %}
+              <ul class="small">
+                <li>Qubits: {{ op_synth_stats.num_qubits }}</li>
+                <li>Size (operations): {{ op_synth_stats.size }}</li>
+                <li>Depth: {{ op_synth_stats.depth }}</li>
+                <li>CX depth: {{ op_synth_stats.cx_depth }}</li>
+                <li>SWAP count: {{ op_synth_swap_count }}</li>
+              </ul>
+            {% endif %}
+
+            {% if op_synth_circuit_text_cx %}
+              <details>
+                <summary>Show SWAP as 3 CXs</summary>
+                <pre>{{ op_synth_circuit_text_cx }}</pre>
+                {% if op_synth_stats_cx %}
+                  <ul class="small">
+                    <li>Depth: {{ op_synth_stats_cx.depth }}</li>
+                    <li>CX depth: {{ op_synth_stats_cx.cx_depth }}</li>
+                    <li>Size (operations): {{ op_synth_stats_cx.size }}</li>
+                  </ul>
+                {% endif %}
+              </details>
+            {% endif %}
+          {% endif %}
+
+          <div class="map-wrap">
+            <div class="map-title">
+              <strong>Coupling map preview</strong>
+              <span class="map-note" id="op_mapLegend"></span>
+            </div>
+            <svg id="couplingSvgOp" viewBox="0 0 900 220" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="map-note mt-1" id="op_mapNote"></div>
+          </div>
+
+        </div>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+/* ============================
+   Scroll + preload
+============================ */
+function saveScrollY(){ try{ sessionStorage.setItem("scrollY", String(window.scrollY||0)); }catch(e){} }
+function restoreScrollYIfAny(){
+  try{
+    const y=sessionStorage.getItem("scrollY");
+    if(y!==null){ sessionStorage.removeItem("scrollY"); const yy=parseInt(y,10);
+      if(!Number.isNaN(yy)){ window.scrollTo(0,yy); return true; }
+    }
+  }catch(e){}
+  return false;
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  restoreScrollYIfAny();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.remove("preload")));
+});
+
+/* ============================
+   Processing overlay (2s delay)
+============================ */
+(function(){
+  const overlay=document.getElementById("processingOverlay");
+  const form=document.getElementById("mainForm");
+  if(!overlay||!form) return;
+  let timer=null;
+  function show(){ overlay.classList.add("show"); overlay.setAttribute("aria-hidden","false"); }
+  function hide(){ overlay.classList.remove("show"); overlay.setAttribute("aria-hidden","true"); }
+  window.addEventListener("pageshow",()=>{ hide(); if(timer){clearTimeout(timer);timer=null;} });
+  form.addEventListener("submit",()=>{ if(timer)clearTimeout(timer); timer=setTimeout(show,2000); });
+  document.querySelectorAll('button[name="action"]').forEach(btn=>{
+    btn.addEventListener("click",()=>{ saveScrollY(); });
+  });
+})();
+
+/* =========================================================
+   Minimal circuit editor (same behavior as Transpile)
+========================================================= */
+(function(){
+  let numQubits=parseInt(document.getElementById('op_num_qubits').value||"3");
+  let cols=parseInt(document.getElementById('op_builder_depth_hidden').value||"10");
+  const MIN_COLS=10, EXTEND_STEP=5;
+  cols=Math.max(MIN_COLS, cols);
+
+  const leftMargin=140, topMargin=30, colW=60, wireGap=55, gateW=40, gateH=26;
+
+  let ops=[];
+  let nextOpId=1;
+
+  let twoQMode=false;
+  let twoQPending=null;
+
+  const svg=document.getElementById("op_circuitSvg");
+  const twoQTool=document.getElementById("op_twoQTool");
+  const twoQStatus=document.getElementById("op_twoQStatus");
+  const twoQGateSelect=document.getElementById("op_twoQGateSelect");
+
+  function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi,v)); }
+
+  function ensureOpIds(){
+    for(const op of ops){
+      if(op.id===undefined||op.id===null) op.id=nextOpId++;
+      else nextOpId=Math.max(nextOpId,(Number(op.id)||0)+1);
+    }
+  }
+  function twoQGate(){ return (twoQGateSelect?.value||"cx").toLowerCase(); }
+  function setTwoQStatus(){
+    if(!twoQMode){ twoQStatus.textContent=""; return; }
+    const g=twoQGate();
+    const directed=(g!=="swap");
+    if(!twoQPending) twoQStatus.textContent = directed ? `${g.toUpperCase()}: click control` : "SWAP: click first qubit";
+    else twoQStatus.textContent = directed ? `${g.toUpperCase()}: control q[${twoQPending.a}] → click target` : `SWAP: first q[${twoQPending.a}] → click second`;
+  }
+
+  function snapFromPoint(clientX, clientY){
+    const pt=svg.createSVGPoint(); pt.x=clientX; pt.y=clientY;
+    const sp=pt.matrixTransform(svg.getScreenCTM().inverse());
+    const col=clamp(Math.round((sp.x-leftMargin)/colW),0,cols-1);
+    const q=clamp(Math.round((sp.y-topMargin)/wireGap),0,numQubits-1);
+    return {col,q};
+  }
+  function opAt(q,col){
+    for(const op of ops){
+      if(op.col!==col) continue;
+      if(op.qubits.length===1 && op.qubits[0]===q) return op;
+      if(op.qubits.length===2 && (op.qubits[0]===q||op.qubits[1]===q)) return op;
+    }
+    return null;
+  }
+  function removeOp(op){ ops=ops.filter(o=>o!==op); }
+  function colBlockedForRange(col,qMin,qMax){
+    for(const op of ops){
+      if(op.col!==col) continue;
+      if(op.qubits.length===1){
+        const q=op.qubits[0];
+        if(q>=qMin && q<=qMax) return true;
+      }else{
+        const a=op.qubits[0], b=op.qubits[1];
+        const lo=Math.min(a,b), hi=Math.max(a,b);
+        if(!(hi<qMin || lo>qMax)) return true;
+      }
+    }
+    return false;
+  }
+  function occupied(q,col){ return colBlockedForRange(col,q,q); }
+  function extendCols(extra=EXTEND_STEP){ cols+=Math.max(1,extra); }
+
+  function nearestFreeColForQubit(q, desiredCol){
+    desiredCol=clamp(desiredCol,0,cols-1);
+    for(let d=0; d<cols; d++){
+      const cR=desiredCol+d;
+      if(cR>=0 && cR<cols && !occupied(q,cR)) return cR;
+      if(d>0){
+        const cL=desiredCol-d;
+        if(cL>=0 && cL<cols && !occupied(q,cL)) return cL;
+      }
+    }
+    const old=cols; extendCols();
+    for(let c=old; c<cols; c++) if(!occupied(q,c)) return c;
+    return null;
+  }
+  function nearestFreeColFor2Q(a,b,desiredCol){
+    desiredCol=clamp(desiredCol,0,cols-1);
+    const lo=Math.min(a,b), hi=Math.max(a,b);
+    for(let d=0; d<cols; d++){
+      const cR=desiredCol+d;
+      if(cR>=0&&cR<cols && !colBlockedForRange(cR,lo,hi)) return cR;
+      if(d>0){
+        const cL=desiredCol-d;
+        if(cL>=0&&cL<cols && !colBlockedForRange(cL,lo,hi)) return cL;
+      }
+    }
+    const old=cols; extendCols();
+    for(let c=old; c<cols; c++) if(!colBlockedForRange(c,lo,hi)) return c;
+    return null;
+  }
+
+  function add1qFromPalette(gate,q,desiredCol){
+    if(!colBlockedForRange(desiredCol,q,q)){
+      const existing=opAt(q,desiredCol);
+      if(existing){
+        if(existing.qubits.length===2) return false;
+        removeOp(existing);
+      }
+      ops.push({id:nextOpId++, gate, qubits:[q], col:desiredCol});
+      return true;
+    }
+    const c0=nearestFreeColForQubit(q,desiredCol);
+    if(c0===null) return false;
+    ops.push({id:nextOpId++, gate, qubits:[q], col:c0});
+    return true;
+  }
+  function add2q(gate,a,b,col){
+    if(a===b) return false;
+    const lo=Math.min(a,b), hi=Math.max(a,b);
+    if(colBlockedForRange(col,lo,hi)) return false;
+    ops.push({id:nextOpId++, gate, qubits:[a,b], col});
+    return true;
+  }
+
+  function serialize(){ return JSON.stringify({num_qubits:numQubits, depth:cols, ops}); }
+  function syncHidden(){
+    document.getElementById("op_circuit_json").value = serialize();
+    document.getElementById("op_builder_depth_hidden").value = String(cols);
+  }
+  function loadFromHidden(){
+    const hidden=document.getElementById("op_circuit_json").value;
+    if(!hidden||!hidden.trim()) return false;
+    try{
+      const obj=JSON.parse(hidden);
+      numQubits=obj.num_qubits;
+      cols=Math.max(MIN_COLS, parseInt(obj.depth||MIN_COLS));
+      ops=Array.isArray(obj.ops)?obj.ops:[];
+      ensureOpIds();
+      document.getElementById("op_num_qubits").value=String(numQubits);
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function svgSetSize(){
+    const width=leftMargin + cols*colW + 40;
+    const height=topMargin + (numQubits-1)*wireGap + 60;
+    svg.setAttribute("width",width);
+    svg.setAttribute("height",height);
+    svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
+  }
+
+  function gateLabel(g){
+    const gg=(g||"").toLowerCase();
+    if(gg==="sdg") return "S†";
+    if(gg==="tdg") return "T†";
+    if(gg==="sxdg") return "SX†";
+    if(gg==="id") return "I";
+    return gg.toUpperCase();
+  }
+
+  function draw(){
+    svgSetSize();
+    svg.innerHTML="";
+
+    const bg=document.createElementNS("http://www.w3.org/2000/svg","rect");
+    bg.setAttribute("x","0"); bg.setAttribute("y","0");
+    bg.setAttribute("width","100%"); bg.setAttribute("height","100%");
+    bg.setAttribute("fill","#fff");
+    svg.appendChild(bg);
+
+    // wires + labels
+    for(let q=0;q<numQubits;q++){
+      const y=topMargin + q*wireGap;
+
+      const label=document.createElementNS("http://www.w3.org/2000/svg","text");
+      label.setAttribute("x",12);
+      label.setAttribute("y",y+5);
+      label.setAttribute("font-family","monospace");
+      label.setAttribute("font-size","14");
+      label.textContent = `q_${q}: |0⟩`;
+      svg.appendChild(label);
+
+      const x1=leftMargin;
+      const x2=leftMargin + (cols-1)*colW + 20;
+      const ln=document.createElementNS("http://www.w3.org/2000/svg","line");
+      ln.setAttribute("x1",x1); ln.setAttribute("x2",x2);
+      ln.setAttribute("y1",y); ln.setAttribute("y2",y);
+      ln.setAttribute("stroke","#a24b79"); ln.setAttribute("stroke-width","2");
+      svg.appendChild(ln);
+    }
+
+    // ops
+    for(const op of ops){
+      const x=leftMargin + op.col*colW;
+      if(op.qubits.length===1){
+        const q=op.qubits[0];
+        const y=topMargin + q*wireGap;
+        const rect=document.createElementNS("http://www.w3.org/2000/svg","rect");
+        rect.setAttribute("x",x-gateW/2); rect.setAttribute("y",y-gateH/2);
+        rect.setAttribute("width",gateW); rect.setAttribute("height",gateH);
+        rect.setAttribute("rx","6");
+        rect.setAttribute("fill","#fff");
+        rect.setAttribute("stroke","#cc0669");
+        rect.setAttribute("stroke-width","2");
+        rect.setAttribute("data-op-id",String(op.id));
+        svg.appendChild(rect);
+
+        const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+        t.setAttribute("x",x); t.setAttribute("y",y+5);
+        t.setAttribute("text-anchor","middle");
+        t.setAttribute("font-weight","800");
+        t.setAttribute("font-family","sans-serif");
+        t.setAttribute("font-size","14");
+        t.setAttribute("fill","#cc0669");
+        t.textContent = gateLabel(op.gate);
+        t.setAttribute("pointer-events","none");
+        svg.appendChild(t);
+      }else{
+        const a=op.qubits[0], b=op.qubits[1];
+        const y1=topMargin + a*wireGap;
+        const y2=topMargin + b*wireGap;
+
+        const v=document.createElementNS("http://www.w3.org/2000/svg","line");
+        v.setAttribute("x1",x); v.setAttribute("x2",x);
+        v.setAttribute("y1",y1); v.setAttribute("y2",y2);
+        v.setAttribute("stroke","#123a6f"); v.setAttribute("stroke-width","2");
+        v.setAttribute("data-op-id",String(op.id));
+        svg.appendChild(v);
+
+        const gg=(op.gate||"").toLowerCase();
+        if(gg==="swap"){
+          const mk=(yy)=>{
+            const l1=document.createElementNS("http://www.w3.org/2000/svg","line");
+            l1.setAttribute("x1",x-8); l1.setAttribute("y1",yy-8);
+            l1.setAttribute("x2",x+8); l1.setAttribute("y2",yy+8);
+            l1.setAttribute("stroke","#123a6f"); l1.setAttribute("stroke-width","2");
+            svg.appendChild(l1);
+            const l2=document.createElementNS("http://www.w3.org/2000/svg","line");
+            l2.setAttribute("x1",x-8); l2.setAttribute("y1",yy+8);
+            l2.setAttribute("x2",x+8); l2.setAttribute("y2",yy-8);
+            l2.setAttribute("stroke","#123a6f"); l2.setAttribute("stroke-width","2");
+            svg.appendChild(l2);
+          };
+          mk(y1); mk(y2);
+        }else{
+          const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+          dot.setAttribute("cx",x); dot.setAttribute("cy",y1);
+          dot.setAttribute("r","6"); dot.setAttribute("fill","#123a6f");
+          svg.appendChild(dot);
+
+          const circ=document.createElementNS("http://www.w3.org/2000/svg","circle");
+          circ.setAttribute("cx",x); circ.setAttribute("cy",y2);
+          circ.setAttribute("r","11");
+          circ.setAttribute("fill","#fff");
+          circ.setAttribute("stroke","#123a6f");
+          circ.setAttribute("stroke-width","2");
+          svg.appendChild(circ);
+
+          const label=document.createElementNS("http://www.w3.org/2000/svg","text");
+          label.setAttribute("x",x); label.setAttribute("y",y2+5);
+          label.setAttribute("text-anchor","middle");
+          label.setAttribute("font-family","monospace");
+          label.setAttribute("font-size","14");
+          label.setAttribute("font-weight","900");
+          label.setAttribute("fill","#123a6f");
+          label.textContent = (gg==="cx") ? "+" : (gg==="cy" ? "Y" : "Z");
+          svg.appendChild(label);
+        }
+      }
+    }
+  }
+
+  function handleClick(e){
+    const {col,q}=snapFromPoint(e.clientX,e.clientY);
+    const existing=opAt(q,col);
+    if(existing){
+      removeOp(existing);
+      twoQPending=null;
+      setTwoQStatus();
+      draw(); syncHidden();
+      return;
+    }
+    if(twoQMode){
+      if(!twoQPending){ twoQPending={a:q}; setTwoQStatus(); return; }
+      const a=twoQPending.a, b=q;
+      const g=twoQGate();
+      const c0=nearestFreeColFor2Q(a,b,col);
+      if(c0===null){ alert("No free space for 2Q gate."); return; }
+      if(!add2q(g,a,b,c0)){ alert("Cannot place 2Q gate."); return; }
+      twoQPending=null; twoQMode=false;
+      twoQTool.classList.remove("active");
+      setTwoQStatus();
+      draw(); syncHidden();
+    }
+  }
+
+  function handleDrop(e){
+    e.preventDefault();
+    const gate=e.dataTransfer.getData("text/gate");
+    if(!gate) return;
+    const {q,col}=snapFromPoint(e.clientX,e.clientY);
+    if(!add1qFromPalette(gate,q,col)){ alert("Cannot place gate."); return; }
+    draw(); syncHidden();
+  }
+
+  // Palette drag
+  document.querySelectorAll("#op_palette .gate").forEach(g=>{
+    g.addEventListener("dragstart",(e)=>e.dataTransfer.setData("text/gate", g.dataset.gate));
+  });
+
+  svg.addEventListener("dragover",(e)=>e.preventDefault());
+  svg.addEventListener("drop", handleDrop);
+  svg.addEventListener("click", handleClick);
+
+  twoQTool.addEventListener("click",()=>{
+    twoQMode=!twoQMode; twoQPending=null;
+    twoQTool.classList.toggle("active", twoQMode);
+    setTwoQStatus();
+  });
+  twoQGateSelect.addEventListener("change",()=>{ if(twoQMode){ twoQPending=null; setTwoQStatus(); } });
+
+  document.getElementById("op_applyEditorBtn").addEventListener("click",()=>{
+    const nq=parseInt(document.getElementById("op_num_qubits").value||"3");
+    numQubits=Math.max(1,nq);
+
+    ops=ops.filter(op=>{
+      if(!op.qubits||!Array.isArray(op.qubits)) return false;
+      if(op.qubits.length===2){
+        const a=op.qubits[0], b=op.qubits[1];
+        return a>=0&&a<numQubits&&b>=0&&b<numQubits&&a!==b;
+      }else{
+        const a=op.qubits[0];
+        return a>=0&&a<numQubits;
+      }
+    });
+
+    ensureOpIds();
+    twoQMode=false; twoQPending=null;
+    twoQTool.classList.remove("active");
+    setTwoQStatus();
+    draw(); syncHidden();
+    drawCouplingMapOp();
+  });
+
+  // QASM save
+  function qasmFromBuilderState(){
+    const opsSorted=[...ops].sort((a,b)=>{
+      const ca=(a.col??0), cb=(b.col??0);
+      if(ca!==cb) return ca-cb;
+      const ga=(a.gate||""), gb=(b.gate||"");
+      if(ga!==gb) return ga.localeCompare(gb);
+      const qa=(a.qubits?.[0]??0), qb=(b.qubits?.[0]??0);
+      return qa-qb;
+    });
+    let out=[];
+    out.push('OPENQASM 2.0;');
+    out.push('include "qelib1.inc";');
+    out.push(`qreg q[${numQubits}];`);
+    for(const op of opsSorted){
+      const g=(op.gate||"").toLowerCase();
+      const qs=op.qubits||[];
+      if(qs.length===1){
+        const q=qs[0];
+        if(g==="id"){}
+        else if(g==="h") out.push(`h q[${q}];`);
+        else if(g==="x") out.push(`x q[${q}];`);
+        else if(g==="y") out.push(`y q[${q}];`);
+        else if(g==="z") out.push(`z q[${q}];`);
+        else if(g==="s") out.push(`s q[${q}];`);
+        else if(g==="sdg") out.push(`sdg q[${q}];`);
+        else if(g==="t") out.push(`t q[${q}];`);
+        else if(g==="tdg") out.push(`tdg q[${q}];`);
+        else if(g==="sx") out.push(`sx q[${q}];`);
+        else if(g==="sxdg") out.push(`sxdg q[${q}];`);
+        else throw new Error(`Unsupported gate: ${g}`);
+      }else if(qs.length===2){
+        const a=qs[0], b=qs[1];
+        if(g==="cx") out.push(`cx q[${a}],q[${b}];`);
+        else if(g==="cy") out.push(`cy q[${a}],q[${b}];`);
+        else if(g==="cz") out.push(`cz q[${a}],q[${b}];`);
+        else if(g==="swap") out.push(`swap q[${a}],q[${b}];`);
+        else throw new Error(`Unsupported 2Q gate: ${g}`);
+      }
+    }
+    return out.join("\n")+"\n";
+  }
+  function downloadText(filename,text){
+    const blob=new Blob([text],{type:"text/plain"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+  document.getElementById("op_saveQasmBtn").addEventListener("click",()=>{
+    try{ downloadText("circuit.qasm", qasmFromBuilderState()); }
+    catch(e){ alert(`Save failed: ${e?.message||e}`); }
+  });
+
+  // QASM load (submit to backend)
+  const loadBtn=document.getElementById("op_loadQasmBtn");
+  const fileInput=document.getElementById("op_qasmFileInput");
+  loadBtn.addEventListener("click",()=>fileInput.click());
+  fileInput.addEventListener("change",()=>{
+    if(!fileInput.files||fileInput.files.length===0) return;
+    saveScrollY();
+    syncHidden();
+
+    let act=document.getElementById("action_hidden_op_load_qasm");
+    if(!act){
+      act=document.createElement("input");
+      act.type="hidden"; act.name="action";
+      act.id="action_hidden_op_load_qasm";
+      document.getElementById("mainForm").appendChild(act);
+    }
+    act.value="op_load_qasm";
+    document.getElementById("mainForm").submit();
+  });
+
+  // Coupling map preview (simple)
+  const couplingSel=document.getElementById("op_map_type");
+  const couplingSvg=document.getElementById("couplingSvgOp");
+  const mapNote=document.getElementById("op_mapNote");
+  function svgEl(n){ return document.createElementNS("http://www.w3.org/2000/svg", n); }
+  function clearSvg(s){ s.innerHTML=""; }
+  function drawNode(s,x,y,label){
+    const c=svgEl("circle");
+    c.setAttribute("cx",x); c.setAttribute("cy",y); c.setAttribute("r","18");
+    c.setAttribute("fill","#fff"); c.setAttribute("stroke","#123a6f"); c.setAttribute("stroke-width","3");
+    s.appendChild(c);
+    const t=svgEl("text");
+    t.setAttribute("x",x); t.setAttribute("y",y+6);
+    t.setAttribute("text-anchor","middle");
+    t.setAttribute("font-family","monospace");
+    t.setAttribute("font-size","14");
+    t.setAttribute("font-weight","900");
+    t.setAttribute("fill","#cc0669");
+    t.textContent=label;
+    s.appendChild(t);
+  }
+  function drawEdge(s,x1,y1,x2,y2){
+    const ln=svgEl("line");
+    ln.setAttribute("x1",x1); ln.setAttribute("y1",y1);
+    ln.setAttribute("x2",x2); ln.setAttribute("y2",y2);
+    ln.setAttribute("stroke","#123a6f");
+    ln.setAttribute("stroke-width","3");
+    ln.setAttribute("opacity","0.5");
+    s.appendChild(ln);
+  }
+  function layoutCircle(n){
+    const pts=[];
+    const cx=450, cy=110, r=70;
+    for(let i=0;i<n;i++){
+      const a=-Math.PI/2 + (2*Math.PI*i)/n;
+      pts.push({x:cx + r*Math.cos(a), y:cy + r*Math.sin(a)});
+    }
+    return pts;
+  }
+  function layoutLine(n){
+    const pts=[];
+    const x0=200, x1=700, y=110;
+    for(let i=0;i<n;i++){
+      const t=(n===1)?0:i/(n-1);
+      pts.push({x:x0 + (x1-x0)*t, y});
+    }
+    return pts;
+  }
+  function drawCouplingMapOp(){
+    const n=Math.max(1, parseInt(document.getElementById("op_num_qubits").value||"1"));
+    const type=(couplingSel?.value||"none").toLowerCase();
+    clearSvg(couplingSvg);
+
+    if(n<=1){
+      mapNote.textContent="With 1 qubit, connectivity constraints are not relevant.";
+      drawNode(couplingSvg,450,110,"0");
+      return;
+    }
+
+    const pts=(type==="line")?layoutLine(n):layoutCircle(n);
+
+    if(type==="line"){
+      mapNote.textContent="Nearest-neighbor connectivity (bidirectional).";
+      for(let i=0;i<n-1;i++) drawEdge(couplingSvg,pts[i].x,pts[i].y,pts[i+1].x,pts[i+1].y);
+    }else if(type==="ring"){
+      mapNote.textContent="Nearest-neighbor + closing edge (bidirectional).";
+      for(let i=0;i<n;i++){
+        const j=(i+1)%n;
+        drawEdge(couplingSvg,pts[i].x,pts[i].y,pts[j].x,pts[j].y);
+      }
+    }else if(type==="full"){
+      mapNote.textContent="Any qubit pair can interact (bidirectional).";
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) drawEdge(couplingSvg,pts[i].x,pts[i].y,pts[j].x,pts[j].y);
+    }else{
+      mapNote.textContent="No coupling constraints enforced.";
+    }
+
+    for(let i=0;i<n;i++) drawNode(couplingSvg,pts[i].x,pts[i].y,String(i));
+  }
+
+  // init
+  loadFromHidden();
+  ensureOpIds();
+  setTwoQStatus();
+  draw();
+  syncHidden();
+  drawCouplingMapOp();
+
+  couplingSel.addEventListener("change", drawCouplingMapOp);
+
+  document.getElementById("mainForm").addEventListener("submit",()=>{
+    saveScrollY();
+    syncHidden();
+  });
+})();
+</script>
+
+</body>
+</html>

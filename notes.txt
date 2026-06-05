@@ -1,0 +1,5 @@
+gemini-2.5-flash (10 richieste/minuto, 250 al giorno — più che sufficiente per uso didattico, e nessuna carta richiesta).
+
+API KEY Gemini:
+https://aistudio.google.com/api-keys?project=allegraccc
+

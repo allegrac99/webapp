@@ -1,0 +1,651 @@
+{# ============================================================
+   chat_widget.html
+   Tutor contestuale per la traspilazione quantistica.
+   Self-contained: CSS + HTML + JS in un solo include.
+   
+   Uso:
+     Aggiungi `{% include "chat_widget.html" %}` prima di </body>
+     in qualsiasi template Jinja2.
+   
+   Richiede:
+     - Backend route POST /api/chat (vedi snippet Python)
+     - Nessuna libreria JS esterna (vanilla JS)
+============================================================ #}
+
+<style>
+  /* ---- Floating action button ---- */
+  .tutor-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9000;
+    background: linear-gradient(135deg, #e7167f 0%, #cc0669 100%);
+    color: #fff;
+    border: none;
+    border-radius: 28px;
+    padding: 12px 20px 12px 16px;
+    box-shadow: 0 6px 20px rgba(204, 6, 105, .35);
+    font-weight: 700;
+    font-size: .92rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .tutor-fab:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(204, 6, 105, .45);
+  }
+  .tutor-fab.hidden { display: none; }
+  .tutor-fab-icon { font-size: 1.2rem; }
+
+  /* ---- Side panel ---- */
+  .tutor-panel {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: 400px;
+    max-width: calc(100vw - 32px);
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 14px 50px rgba(0, 0, 0, .22);
+    z-index: 9001;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #f0b6d3;
+  }
+  .tutor-panel.open { display: flex; }
+
+  .tutor-header {
+    background: linear-gradient(135deg, #123a6f 0%, #1e5099 100%);
+    color: #fff;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .tutor-header-info { line-height: 1.25; }
+  .tutor-title { font-weight: 800; font-size: 1rem; display: flex; align-items: center; gap: 6px; }
+  .tutor-subtitle { font-size: .75rem; opacity: .85; margin-top: 2px; }
+  .tutor-actions { display: flex; gap: 4px; }
+  .tutor-action-btn {
+    background: rgba(255, 255, 255, .15);
+    border: none;
+    color: #fff;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: .9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .15s;
+  }
+  .tutor-action-btn:hover { background: rgba(255, 255, 255, .28); }
+
+  /* ---- Messages area ---- */
+  .tutor-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    background: #fdf7fb;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tutor-messages::-webkit-scrollbar { width: 6px; }
+  .tutor-messages::-webkit-scrollbar-thumb { background: #f0b6d3; border-radius: 3px; }
+
+  .tutor-msg {
+    max-width: 85%;
+    padding: 10px 13px;
+    border-radius: 14px;
+    font-size: .89rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .tutor-msg-user {
+    background: linear-gradient(135deg, #e7167f 0%, #cc0669 100%);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+  .tutor-msg-assistant {
+    background: #fff;
+    color: #2a2a2a;
+    align-self: flex-start;
+    border: 1px solid #f0e0eb;
+    border-bottom-left-radius: 4px;
+  }
+  .tutor-msg-assistant code {
+    background: #f3e8ff;
+    color: #6b2b4a;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: .83rem;
+  }
+  .tutor-msg-error {
+    background: #ffe6e6;
+    color: #8b0000;
+    align-self: stretch;
+    border: 1px solid #ffb6b6;
+    font-size: .82rem;
+    text-align: center;
+  }
+
+  /* ---- Empty state with suggestions ---- */
+  .tutor-empty {
+    color: #6b2b4a;
+    font-size: .88rem;
+    padding: 8px 4px;
+  }
+  .tutor-empty p { margin-bottom: 8px; line-height: 1.5; }
+  .tutor-empty-hint {
+    font-weight: 700;
+    color: #123a6f;
+    margin-top: 14px !important;
+  }
+  .tutor-suggestions { display: flex; flex-direction: column; gap: 6px; }
+  .tutor-suggestion {
+    background: #fff;
+    border: 1px solid #f0b6d3;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: .83rem;
+    color: #2a2a2a;
+    cursor: pointer;
+    text-align: left;
+    transition: all .15s;
+    line-height: 1.4;
+  }
+  .tutor-suggestion:hover {
+    background: #fff7fb;
+    border-color: #cc0669;
+    transform: translateX(2px);
+  }
+
+  /* ---- Typing indicator ---- */
+  .tutor-typing {
+    align-self: flex-start;
+    background: #fff;
+    border: 1px solid #f0e0eb;
+    border-radius: 14px;
+    padding: 10px 14px;
+    display: none;
+    align-items: center;
+    gap: 4px;
+  }
+  .tutor-typing.show { display: flex; }
+  .tutor-typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #cc0669;
+    animation: tutorBlink 1.4s infinite both;
+  }
+  .tutor-typing-dot:nth-child(2) { animation-delay: .2s; }
+  .tutor-typing-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes tutorBlink {
+    0%, 80%, 100% { opacity: .3; }
+    40% { opacity: 1; }
+  }
+
+  /* ---- Context indicator ---- */
+  .tutor-context {
+    background: #f0f7ff;
+    border-top: 1px solid #cfe6ff;
+    padding: 6px 12px;
+    font-size: .72rem;
+    color: #123a6f;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tutor-context-icon { font-size: .9rem; }
+
+  /* ---- Input area ---- */
+  .tutor-input-wrap {
+    border-top: 1px solid #f0e0eb;
+    padding: 10px;
+    background: #fff;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .tutor-input {
+    flex: 1;
+    border: 1px solid #f0b6d3;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: .88rem;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    min-height: 38px;
+    max-height: 110px;
+    line-height: 1.4;
+  }
+  .tutor-input:focus { border-color: #cc0669; box-shadow: 0 0 0 3px rgba(204, 6, 105, .12); }
+  .tutor-send {
+    background: linear-gradient(135deg, #e7167f 0%, #cc0669 100%);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 9px 16px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: .86rem;
+    transition: opacity .15s;
+  }
+  .tutor-send:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---- Mobile ---- */
+  @media (max-width: 520px) {
+    .tutor-panel {
+      top: 0; right: 0; bottom: 0; left: 0;
+      width: 100%;
+      max-width: 100%;
+      border-radius: 0;
+    }
+    .tutor-fab { bottom: 16px; right: 16px; padding: 10px 14px 10px 12px; font-size: .85rem; }
+  }
+</style>
+
+<!-- Floating button -->
+<button id="tutorFab" class="tutor-fab" type="button" aria-label="Apri chat tutor">
+  <span class="tutor-fab-icon">💬</span>
+  <span>Chiedi al tutor</span>
+</button>
+
+<!-- Chat panel -->
+<aside id="tutorPanel" class="tutor-panel" role="dialog" aria-label="Tutor chat">
+  <div class="tutor-header">
+    <div class="tutor-header-info">
+      <div class="tutor-title">🎓 Tutor di traspilazione</div>
+      <div class="tutor-subtitle">Conosce il tuo circuito e i risultati</div>
+    </div>
+    <div class="tutor-actions">
+      <button class="tutor-action-btn" id="tutorClear" type="button" title="Pulisci chat" aria-label="Pulisci chat">🗑️</button>
+      <button class="tutor-action-btn" id="tutorClose" type="button" title="Chiudi" aria-label="Chiudi chat">✕</button>
+    </div>
+  </div>
+
+  <div id="tutorMessages" class="tutor-messages" aria-live="polite"></div>
+
+  <div id="tutorContextBar" class="tutor-context">
+    <span class="tutor-context-icon">📎</span>
+    <span id="tutorContextText">Nessun contesto disponibile</span>
+  </div>
+
+  <div class="tutor-input-wrap">
+    <textarea id="tutorInput" class="tutor-input" placeholder="Scrivi la tua domanda... (Invio per inviare, Shift+Invio per andare a capo)" rows="1"></textarea>
+    <button id="tutorSend" class="tutor-send" type="button">Invia</button>
+  </div>
+</aside>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ============================================================
+     CONFIG
+  ============================================================ */
+  var ENDPOINT = '/api/chat';
+  var STORAGE_KEY = 'tutor_chat_history_v1';
+  var MAX_HISTORY = 30;
+
+  /* ============================================================
+     STATE
+  ============================================================ */
+  var messages = [];
+  var isLoading = false;
+
+  /* ============================================================
+     DOM REFS
+  ============================================================ */
+  var fab = document.getElementById('tutorFab');
+  var panel = document.getElementById('tutorPanel');
+  var closeBtn = document.getElementById('tutorClose');
+  var clearBtn = document.getElementById('tutorClear');
+  var msgsEl = document.getElementById('tutorMessages');
+  var inputEl = document.getElementById('tutorInput');
+  var sendBtn = document.getElementById('tutorSend');
+  var ctxTextEl = document.getElementById('tutorContextText');
+
+  /* ============================================================
+     STORAGE
+  ============================================================ */
+  function loadHistory() {
+    try {
+      var raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) messages = JSON.parse(raw) || [];
+    } catch (e) { messages = []; }
+  }
+  function saveHistory() {
+    try {
+      var slice = messages.slice(-MAX_HISTORY);
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(slice));
+    } catch (e) {}
+  }
+
+  /* ============================================================
+     CONTEXT EXTRACTION
+     Legge dal DOM lo stato corrente: sezione visibile, circuito,
+     coupling map, layout, routing. Tutto best-effort.
+  ============================================================ */
+  function getCurrentSection() {
+    var sections = ['translation', 'routing', 'layout', 'target', 'editor'];
+    for (var i = 0; i < sections.length; i++) {
+      var el = document.getElementById('section-' + sections[i]);
+      if (!el) continue;
+      var rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.6 && rect.bottom > window.innerHeight * 0.3) {
+        return sections[i];
+      }
+    }
+    return 'editor';
+  }
+
+  function textFromPre(selector, maxLen) {
+    var el = document.querySelector(selector);
+    if (!el) return null;
+    var t = el.textContent.trim();
+    if (maxLen && t.length > maxLen) t = t.slice(0, maxLen) + '\n... (truncated)';
+    return t || null;
+  }
+
+  function extractContext() {
+    var ctx = {};
+
+    ctx.section = getCurrentSection();
+
+    // Circuit
+    var circ = textFromPre('.current-circuit-wrap pre', 2500);
+    if (circ) ctx.circuit_text = circ;
+
+    // Selected options
+    var mapSel = document.getElementById('map_type');
+    if (mapSel) ctx.coupling_map = mapSel.value;
+
+    var nq = document.getElementById('num_qubits');
+    if (nq) ctx.num_qubits = parseInt(nq.value || '0');
+
+    var layoutSel = document.getElementById('layout_method');
+    if (layoutSel) ctx.layout_method = layoutSel.value;
+
+    var routSel = document.getElementById('routing_method');
+    if (routSel) ctx.routing_method = routSel.value;
+
+    var basisSel = document.getElementById('translation_basis');
+    if (basisSel) ctx.translation_basis = basisSel.value;
+
+    // Layout assigned (from chips)
+    var chips = document.querySelectorAll('.layout-card .chip');
+    if (chips.length > 0) {
+      var pairs = [];
+      chips.forEach(function(c) {
+        var v = c.querySelector('.v');
+        var p = c.querySelector('.p');
+        if (v && p) pairs.push(v.textContent.trim() + '->' + p.textContent.trim());
+      });
+      if (pairs.length) ctx.layout_pairs = pairs.join(', ');
+    }
+
+    // Routed swap count (extract from stats ul under section-routing)
+    var routingCard = document.getElementById('section-routing');
+    if (routingCard) {
+      var statsItems = routingCard.querySelectorAll('ul.small li');
+      statsItems.forEach(function(li) {
+        var t = li.textContent;
+        var m = t.match(/SWAP[^:]*:\s*(\d+)/i);
+        if (m) ctx.routed_swap_count = parseInt(m[1]);
+        m = t.match(/Depth:\s*(\d+)/i);
+        if (m && !('routed_depth' in ctx)) ctx.routed_depth = parseInt(m[1]);
+      });
+
+      var routedPre = routingCard.querySelector('.card-body > div > pre');
+      if (routedPre) {
+        var rt = routedPre.textContent.trim();
+        if (rt.length > 2500) rt = rt.slice(0, 2500) + '\n... (truncated)';
+        ctx.routed_text = rt;
+      }
+    }
+
+    return ctx;
+  }
+
+  function updateContextBar() {
+    var ctx = extractContext();
+    var parts = [];
+    var sectionLabels = {
+      editor: 'Editor circuito',
+      target: 'Coupling map',
+      layout: 'Layout',
+      routing: 'Routing',
+      translation: 'Traduzione'
+    };
+    parts.push(sectionLabels[ctx.section] || ctx.section);
+    if (ctx.coupling_map) parts.push('map: ' + ctx.coupling_map);
+    if ('routed_swap_count' in ctx) parts.push(ctx.routed_swap_count + ' SWAP');
+    ctxTextEl.textContent = 'Vedo: ' + parts.join(' | ');
+  }
+
+  /* ============================================================
+     SUGGESTIONS — dipendono dal contesto
+  ============================================================ */
+  function getSuggestions() {
+    var ctx = extractContext();
+    var s = [];
+
+    if (!ctx.circuit_text) {
+      s.push('Cos\u2019\u00e8 la traspilazione quantistica e perch\u00e9 serve?');
+      s.push('Come costruisco un circuito che richieder\u00e0 routing?');
+      s.push('Quanti qubit devo usare per vedere il routing in azione?');
+      return s;
+    }
+
+    if (!ctx.layout_pairs) {
+      s.push('Cos\u2019\u00e8 il layout e perch\u00e9 \u00e8 importante?');
+      s.push('Quale differenza c\u2019\u00e8 tra TrivialLayout e SabreLayout?');
+      s.push('Come si decide il layout migliore per il mio circuito?');
+      return s;
+    }
+
+    if (!('routed_swap_count' in ctx)) {
+      s.push('Perch\u00e9 il layout ha scelto questa mappatura?');
+      s.push('Quanti SWAP pensi servir\u00e0 inserire?');
+      s.push('Cosa fa esattamente il routing stage?');
+      return s;
+    }
+
+    if (ctx.routed_swap_count === 0) {
+      s.push('Perch\u00e9 il routing non ha inserito nessun SWAP?');
+      s.push('Cosa cambierebbe con un altro layout?');
+      s.push('Cosa cambierebbe con un altro coupling map?');
+    } else {
+      s.push('Perch\u00e9 sono stati inseriti ' + ctx.routed_swap_count + ' SWAP nel mio circuito?');
+      s.push('Come potrei ridurre il numero di SWAP?');
+      s.push('Cosa significa che ogni SWAP equivale a 3 CX?');
+    }
+    return s;
+  }
+
+  /* ============================================================
+     RENDERING
+  ============================================================ */
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Renderizza testo plain con: `code inline`, doppio newline = paragrafo
+  function renderMsgContent(text) {
+    var safe = escapeHtml(text);
+    safe = safe.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return safe;
+  }
+
+  function renderMessages() {
+    msgsEl.innerHTML = '';
+
+    if (messages.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'tutor-empty';
+      empty.innerHTML =
+        '<p>Ciao! Posso vederlo che stai esplorando la traspilazione. ' +
+        'Conosco il tuo circuito e i risultati correnti.</p>' +
+        '<p>Non darò risposte preconfezionate: ti faccio domande per aiutarti a capire.</p>' +
+        '<p class="tutor-empty-hint">💡 Prova a chiedere:</p>' +
+        '<div class="tutor-suggestions" id="tutorSuggestions"></div>';
+      msgsEl.appendChild(empty);
+
+      var sugContainer = document.getElementById('tutorSuggestions');
+      var suggestions = getSuggestions();
+      suggestions.forEach(function(text) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tutor-suggestion';
+        btn.textContent = text;
+        btn.addEventListener('click', function() {
+          inputEl.value = text;
+          inputEl.focus();
+          sendMessage();
+        });
+        sugContainer.appendChild(btn);
+      });
+      return;
+    }
+
+    messages.forEach(function(m) {
+      var div = document.createElement('div');
+      div.className = 'tutor-msg ' + (m.role === 'user' ? 'tutor-msg-user' : 'tutor-msg-assistant');
+      if (m.error) div.className = 'tutor-msg tutor-msg-error';
+      div.innerHTML = renderMsgContent(m.content);
+      msgsEl.appendChild(div);
+    });
+
+    if (isLoading) {
+      var t = document.createElement('div');
+      t.className = 'tutor-typing show';
+      t.innerHTML = '<span class="tutor-typing-dot"></span><span class="tutor-typing-dot"></span><span class="tutor-typing-dot"></span>';
+      msgsEl.appendChild(t);
+    }
+
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  /* ============================================================
+     NETWORK
+  ============================================================ */
+  function sendMessage() {
+    var text = (inputEl.value || '').trim();
+    if (!text || isLoading) return;
+
+    messages.push({ role: 'user', content: text });
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    saveHistory();
+    renderMessages();
+
+    isLoading = true;
+    sendBtn.disabled = true;
+    renderMessages();
+
+    var payload = {
+      messages: messages.map(function(m) { return { role: m.role, content: m.content }; }),
+      context: extractContext()
+    };
+
+    fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var reply = (data && data.reply) || '(Risposta vuota.)';
+      messages.push({
+        role: 'assistant',
+        content: reply,
+        error: !!(data && data.error)
+      });
+    })
+    .catch(function(err) {
+      messages.push({
+        role: 'assistant',
+        content: 'Errore di rete: ' + (err && err.message ? err.message : err),
+        error: true
+      });
+    })
+    .then(function() {
+      isLoading = false;
+      sendBtn.disabled = false;
+      saveHistory();
+      renderMessages();
+      inputEl.focus();
+    });
+  }
+
+  /* ============================================================
+     UI EVENTS
+  ============================================================ */
+  fab.addEventListener('click', function() {
+    panel.classList.add('open');
+    fab.classList.add('hidden');
+    updateContextBar();
+    renderMessages();
+    setTimeout(function() { inputEl.focus(); }, 100);
+  });
+
+  closeBtn.addEventListener('click', function() {
+    panel.classList.remove('open');
+    fab.classList.remove('hidden');
+  });
+
+  clearBtn.addEventListener('click', function() {
+    if (messages.length === 0) return;
+    if (!confirm('Sicuro di voler cancellare la conversazione?')) return;
+    messages = [];
+    saveHistory();
+    renderMessages();
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  inputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Auto-resize textarea
+  inputEl.addEventListener('input', function() {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px';
+  });
+
+  // Update context bar when user scrolls (debounced)
+  var scrollDebounce = null;
+  window.addEventListener('scroll', function() {
+    if (!panel.classList.contains('open')) return;
+    if (scrollDebounce) clearTimeout(scrollDebounce);
+    scrollDebounce = setTimeout(updateContextBar, 300);
+  });
+
+  /* ============================================================
+     INIT
+  ============================================================ */
+  loadHistory();
+  renderMessages();
+})();
+</script>

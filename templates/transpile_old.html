@@ -1,0 +1,2341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Transpilation</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body { background-color: #ffe6f2; }
+
+    .top-logos img{
+    height: 54px;
+    width: auto;
+    object-fit: contain;
+    }
+
+    .page-wrap{
+      max-width: 1050px;
+      margin: 0 auto;
+    }
+
+    pre {
+      background-color: #fff7fb;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      margin-bottom: 0.75rem;
+      overflow-x: auto;
+    }
+
+    .section-title { margin: 0; font-weight: 600; }
+
+    .btn-apply {
+      background-color: #e7167f;
+      border-color: #e7167f;
+      color: #ffffff;
+    }
+    .btn-apply:hover {
+      background-color: #cc0669;
+      border-color: #cc0669;
+      color: #ffffff;
+    }
+
+    .palette {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+    .gate {
+      user-select: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #cc0669;
+      background: #fff;
+      font-weight: 700;
+      cursor: grab;
+    }
+    .gate:active { cursor: grabbing; }
+
+    .tool {
+      user-select: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #123a6f;
+      background: #ffffff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tool.active { background: #123a6f; color: #fff; }
+
+    .hint { font-size: 0.9rem; color: #6b2b4a; }
+
+    .editor-wrap {
+      overflow-x: auto;
+      padding: 10px;
+      background: #fff7fb;
+      border-radius: 10px;
+      border: 1px solid #f0b6d3;
+    }
+
+    .layout-card {
+      background: #fff;
+      border: 1px solid #f0b6d3;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+      margin-top: 10px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #f0b6d3;
+      background: #fff7fb;
+      font-size: 0.9rem;
+      margin: 4px 6px 0 0;
+      white-space: nowrap;
+    }
+    .chip .v { font-family: monospace; font-weight: 700; color: #cc0669; }
+    .chip .arrow { color: #6b2b4a; font-weight: 700; }
+    .chip .p {
+      font-weight: 800;
+      color: #123a6f;
+      background: #e6f2ff;
+      border: 1px solid #cfe6ff;
+      border-radius: 10px;
+      padding: 2px 8px;
+      min-width: 28px;
+      text-align: center;
+    }
+
+    .layout-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .layout-bar .box {
+      width: 38px; height: 30px;
+      border-radius: 10px;
+      border: 1px solid #f0b6d3;
+      background: #fff7fb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #123a6f;
+    }
+    .layout-bar .label {
+      width: 100%;
+      font-size: 0.85rem;
+      color: #6b2b4a;
+      margin-bottom: 2px;
+    }
+
+    .mini-card {
+      background: #ffffff;
+      border: 1px solid #f0b6d3;
+      border-radius: 14px;
+      padding: 12px 12px 6px 12px;
+      margin-top: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+
+    details summary { cursor: pointer; font-weight: 700; color: #123a6f; margin: 6px 0; }
+
+    .card-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 0.75rem;
+    }
+
+    .map-wrap {
+      margin-top: 12px;
+      background: #fff;
+      border: 1px solid #f0b6d3;
+      border-radius: 14px;
+      padding: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+    .map-title {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .map-title strong { color: #123a6f; }
+    .map-note { font-size: 0.85rem; color: #6b2b4a; }
+
+    #couplingSvg { width: 100%; height: 220px; display:block; }
+    #layoutMapSvg { width: 100%; height: 240px; display:block; margin-top: 8px; }
+
+    .docline a { word-break: break-all; }
+
+    .current-circuit-wrap{
+      margin-top: 14px;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+
+    /* --- UX drag interno SVG --- */
+    .op-hit { cursor: grab; }
+    .op-hit:active { cursor: grabbing; }
+
+    /* --- Drag UX: highlight colonne e ghost label --- */
+    .col-highlight {
+      fill: #e6f2ff;
+      stroke: #cfe6ff;
+      stroke-width: 1;
+      opacity: 0.55;
+    }
+
+    .col-highlight.bad {
+      fill: #ffe6f2;
+      stroke: #f0b6d3;
+      opacity: 0.6;
+    }
+
+    .ghost-label {
+      font-family: monospace;
+      font-size: 12px;
+      font-weight: 900;
+      fill: #123a6f;
+    }
+
+    .processing-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 230, 242, 0.65);
+    display: none;            /* hidden by default */
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+  }
+
+  .processing-overlay.show{
+    display: flex;
+  }
+
+  .processing-card{
+    background: #ffffff;
+    border: 1px solid #f0b6d3;
+    border-radius: 16px;
+    padding: 18px 22px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    text-align: center;
+    min-width: 260px;
+  }
+
+  html { scroll-behavior: auto !important; } /* evita scroll "smooth" visibile */
+  body.preload { visibility: hidden; }       /* nasconde la pagina finché ripristino scroll */
+
+  /* Coupling preview più compatta quando sta a destra */
+  .map-wrap-compact{
+    margin-top: 0;              /* non scendere sotto il select */
+    padding: 10px;
+  }
+  .map-wrap-compact #couplingSvg{
+    height: 180px;              /* più bassa (prima era 220) */
+  }
+
+
+
+  </style>
+</head>
+
+<!-- Processing overlay (hidden by default) -->
+<div id="processingOverlay" class="processing-overlay" aria-hidden="true">
+  <div class="processing-card">
+    <div class="spinner-border" role="status" aria-label="Loading"></div>
+    <div class="mt-3 fw-semibold">Processing…</div>
+    <div class="small text-muted mt-1">This may take a few seconds.</div>
+  </div>
+</div>
+
+
+<body class="preload">
+<div class="container py-4">
+
+  <!-- LOGHI IN ALTO -->
+  <div class="top-logos d-flex justify-content-between align-items-center mb-3">
+    <img src="{{ url_for('static', filename='img/logo_unina.png') }}"
+         alt="Logo left">
+    <img src="{{ url_for('static', filename='img/logo_quasar.png') }}"
+         alt="Logo Quasar">
+  </div>
+
+  <div class="page-wrap">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2>Transpilation</h2>
+      <a href="{{ url_for('home') }}" class="btn btn-outline-secondary btn-sm">Back to Home</a>
+    </div>
+
+    <form method="post" id="mainForm" enctype="multipart/form-data">
+      <input type="hidden" name="circuit_json" id="circuit_json" value='{{ circuit_json|default("") }}'>
+
+      <input type="hidden" name="layout_list_str" id="layout_list_str" value="{{ layout_list_str }}">
+      <input type="hidden" name="layout_for_hash" id="layout_for_hash" value="{{ layout_for_hash|default('') }}">
+
+      <input type="hidden" name="builder_depth" id="builder_depth_hidden" value="{{ builder_depth }}">
+      <input type="hidden" name="focus_section" id="focus_section" value="{{ focus_section|default('') }}">
+
+      <input type="hidden" name="routed_qasm_str" id="routed_qasm_str" value='{{ routed_qasm_str|default("") }}'>
+      <input type="hidden" name="routed_for_hash" id="routed_for_hash" value='{{ routed_for_hash|default("") }}'>
+
+      <!-- 1) Circuit editor -->
+      <div class="card mb-4" id="section-editor">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">1. Build your circuit</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm" name="action" value="clear_all" id="clearAllBtn">
+              Clear all
+            </button>
+          </div>
+
+          {% if editor_error %}
+            <div class="alert alert-danger" role="alert">
+              {{ editor_error }}
+            </div>
+          {% endif %}
+
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label for="num_qubits" class="form-label">Number of qubits</label>
+              <input type="number" min="1" class="form-control" id="num_qubits" name="num_qubits" value="{{ num_qubits }}">
+            </div>
+
+            <div class="col-md-9 d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-apply mt-3" id="applyEditorBtn">Apply</button>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="hint mb-2">
+            <ul class="mb-0">
+              <li>
+                Drag & drop <strong>single-qubit gates</strong> onto the circuit (they will be placed in the
+                <strong>nearest free column</strong>).
+              </li>
+              <li>
+                For <strong>2Q gates</strong>: click the <strong>2Q gates</strong> button, pick the gate, then click two qubits.
+                For directed gates (CX/CY/CZ) you click <strong>control</strong> then <strong>target</strong>.
+              </li>
+              <li>
+                You can <strong>drag gates already placed</strong> to move them to a free slot.
+              </li>
+              <li>
+                Click a placed gate to <strong>remove</strong> it.
+              </li>
+            </ul>
+          </div>
+
+
+          <div class="palette">
+            <div class="gate" draggable="true" data-gate="id">I</div>
+            <div class="gate" draggable="true" data-gate="h">H</div>
+            <div class="gate" draggable="true" data-gate="x">X</div>
+            <div class="gate" draggable="true" data-gate="y">Y</div>
+            <div class="gate" draggable="true" data-gate="z">Z</div>
+            <div class="gate" draggable="true" data-gate="s">S</div>
+            <div class="gate" draggable="true" data-gate="sdg">S†</div>
+            <div class="gate" draggable="true" data-gate="t">T</div>
+            <div class="gate" draggable="true" data-gate="tdg">T†</div>
+            <div class="gate" draggable="true" data-gate="sx">SX</div>
+            <div class="gate" draggable="true" data-gate="sxdg">SX†</div>
+
+            <div class="ms-2 tool" id="twoQTool">2Q gates</div>
+            <select class="form-select form-select-sm" id="twoQGateSelect" style="width: auto;">
+              <option value="cx">CX</option>
+              <option value="cy">CY</option>
+              <option value="cz">CZ</option>
+              <option value="swap">SWAP</option>
+            </select>
+            <span class="hint ms-2" id="twoQStatus"></span>
+          </div>
+
+          <div class="editor-wrap">
+            <svg id="circuitSvg"></svg>
+          </div>
+
+          <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+            <input type="file" id="qasmFileInput" name="qasm_file" accept=".qasm,.txt" style="display:none;">
+
+            <button type="button" class="btn btn-outline-secondary" id="loadQasmBtn">
+              Load circuit (QASM)
+            </button>
+
+            <button type="button" class="btn btn-outline-secondary" id="saveQasmBtn">
+              Save circuit (QASM)
+            </button>
+
+            {% if show_qiskit %}
+              <button type="submit"
+                      class="btn btn-outline-secondary"
+                      name="action"
+                      value="hide_qiskit"
+                      id="hideBtn">
+                Hide Qiskit version
+              </button>
+            {% else %}
+              <button type="submit"
+                      class="btn btn-apply"
+                      name="action"
+                      value="render_circuit"
+                      id="renderBtn">
+                Display Qiskit version
+              </button>
+            {% endif %}
+
+          </div>
+
+          {% if original_circuit_text %}
+            <div class="current-circuit-wrap">
+              <hr>
+              <h6 class="mb-2">Current circuit</h6>
+              <pre class="mb-2">{{ original_circuit_text }}</pre>
+              {% if original_stats %}
+                <ul class="small mb-0">
+                  <li>Qubits: {{ original_stats.num_qubits }}</li>
+                  <li>Size (operations): {{ original_stats.size }}</li>
+                  <li>Depth: {{ original_stats.depth }}</li>
+                  <li>CX depth: {{ original_stats.cx_depth }}</li>
+                </ul>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 2. Target constraints -->
+      <div class="card mb-4" id="section-target">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">2. Connectivity constraints</h5>
+            <span></span>
+          </div>
+
+          <!-- NEW: select a sinistra, preview a destra -->
+          <div class="row g-3 align-items-start">
+            <div class="col-md-4">
+              <label for="map_type" class="form-label">Coupling map</label>
+              <select class="form-select" id="map_type" name="map_type">
+                {% for key, label in map_options.items() %}
+                  <option value="{{ key }}" {% if key == selected_map %}selected{% endif %}>
+                    {{ key|capitalize }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-8">
+              <div class="map-wrap map-wrap-compact">
+                <div class="map-title">
+                  <strong>Coupling map preview</strong>
+                  <span class="map-note" id="mapLegend"></span>
+                </div>
+                <svg id="couplingSvg" viewBox="0 0 900 220" preserveAspectRatio="xMidYMid meet"></svg>
+                <div class="map-note mt-1" id="mapNote"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- 3. Layout stage -->
+      <div class="card mb-4" id="section-layout">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">3. Layout stage</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm" name="action" value="clear_layout" id="clearLayoutTop">
+              Clear
+            </button>
+          </div>
+
+          {% if layout_error %}
+            <div class="alert alert-danger" role="alert">
+              {{ layout_error }}
+            </div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="layout_method" class="form-label">Layout method</label>
+              <select class="form-select" id="layout_method" name="layout_method">
+                {% for key, val in layout_options.items() %}
+                  {% set doc = layout_docs.get(key) %}
+                  <option value="{{ key }}"
+                          data-doc="{{ doc or '' }}"
+                          {% if key == selected_layout %}selected{% endif %}>
+                    {% if key == "none" %}None
+                    {% elif key == "custom" %}Custom
+                    {% else %}{{ key|capitalize }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+
+              <div class="docline small mt-2">
+                Docs: <a id="layoutDocLink" href="#" target="_blank" rel="noopener">—</a>
+              </div>
+
+              <div class="hint mt-2" id="sabreLayoutHint" style="display:none;">
+                <strong>Note:</strong> SabreLayout uses a routing-aware heuristic to search for a good initial qubit mapping.
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-3" id="custom_layout_row" style="display: none;">
+            <div class="col-md-6">
+              <label for="custom_layout" class="form-label">Custom layout</label>
+              <select class="form-select" id="custom_layout" name="custom_layout">
+                <option value="">-- select layout --</option>
+                {% for layout in layout_permutations %}
+                  <option value="{{ layout }}" {% if layout == custom_layout_str %}selected{% endif %}>
+                    {{ layout }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button type="submit" name="action" value="apply_layout" class="btn btn-apply" id="applyLayoutBtn">
+              Apply layout
+            </button>
+            <button type="submit" name="action" value="compare_layout" class="btn btn-outline-secondary" id="compareLayoutBtn">
+              Compare
+            </button>
+          </div>
+
+          <div class="map-wrap" id="layoutMapWrap" style="display:none;">
+            <div class="map-title">
+              <strong>Layout on coupling map</strong>
+              <span class="map-note">Inside: physical index · Above: mapped logical qubit</span>
+            </div>
+            <svg id="layoutMapSvg" viewBox="0 0 900 240" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="map-note mt-1" id="layoutMapNote"></div>
+          </div>
+
+          {% if layout_pairs %}
+            <hr>
+            <div class="layout-card">
+              <h6 class="mb-2">Selected layout</h6>
+              <div class="hint mb-2">Virtual qubits mapped to physical positions:</div>
+
+              <div>
+                {% for v, p in layout_pairs %}
+                  <span class="chip">
+                    <span class="v">q[{{ v }}]</span>
+                    <span class="arrow">→</span>
+                    <span class="p">{{ p }}</span>
+                  </span>
+                {% endfor %}
+              </div>
+
+              <div class="layout-bar mt-3">
+                <div class="label"><strong>Physical positions used (in virtual order):</strong></div>
+                {% for v, p in layout_pairs %}
+                  <div class="box" title="q[{{v}}] mapped to {{p}}">{{ p }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+
+          {% if layout_compare_results %}
+            <hr>
+            <h6 class="mb-2">Layout comparison</h6>
+            <div class="hint mb-2">Results for all layout methods (plus custom if selected):</div>
+
+            {% for item in layout_compare_results %}
+              <div class="mini-card">
+                <div class="d-flex justify-content-between align-items-center">
+                  <strong>{{ item.method|capitalize }}</strong>
+                  <span class="hint">virtual → physical</span>
+                </div>
+
+                <div class="mt-2">
+                  {% for v, p in item.layout_pairs %}
+                    <span class="chip">
+                      <span class="v">q[{{ v }}]</span>
+                      <span class="arrow">→</span>
+                      <span class="p">{{ p }}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 4. Routing stage -->
+      <div class="card mb-4" id="section-routing">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">4. Routing stage</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm" name="action" value="clear_routing" id="clearRoutingTop">
+              Clear
+            </button>
+          </div>
+
+          {% if routing_error %}
+            <div class="alert alert-danger" role="alert">
+              {{ routing_error }}
+            </div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="routing_method" class="form-label">Routing method</label>
+              <select class="form-select" id="routing_method" name="routing_method">
+                {% for key, val in routing_options.items() %}
+                  {% set doc = routing_docs.get(key) %}
+                  <option value="{{ key }}"
+                          data-doc="{{ doc or '' }}"
+                          {% if key == selected_routing %}selected{% endif %}>
+                    {% if key == "none" %}None (no routing){% else %}{{ key|capitalize }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+
+              <div class="docline small mt-2">
+                Docs: <a id="routingDocLink" href="#" target="_blank" rel="noopener">—</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button type="submit" name="action" value="apply_routing" class="btn btn-apply" id="applyRoutingBtn">
+              Apply routing
+            </button>
+            <button type="submit" name="action" value="compare_routing" class="btn btn-outline-secondary" id="compareRoutingBtn">
+              Compare
+            </button>
+          </div>
+
+          {% if routed_circuit_text %}
+            <hr>
+            <div>
+              <h6>After routing</h6>
+
+              
+
+              <pre>{{ routed_circuit_text }}</pre>
+
+              {% if routing_analysis_text and ('not configured' not in routing_analysis_text|lower) %}
+                <div class="alert alert-secondary" role="alert">
+                  <strong>Routing Analysis</strong>
+                  <div class="small mt-1" style="white-space: pre-wrap;">{{ routing_analysis_text }}</div>
+                </div>
+              {% elif routing_analysis_text and ('not configured' in routing_analysis_text|lower) %}
+                <div class="text-muted small mt-2">Routing analysis unavailable.</div>
+              {% endif %}
+
+              {% if routed_stats %}
+                <ul class="small">
+                  <li>Qubits: {{ routed_stats.num_qubits }}</li>
+                  <li>Size (operations): {{ routed_stats.size }}</li>
+                  <li>Depth: {{ routed_stats.depth }}</li>
+                  <li>CX depth: {{ routed_stats.cx_depth }}</li>
+                  <li>SWAP count: {{ routed_swap_count }}</li>
+                </ul>
+              {% endif %}
+
+              {% if routed_circuit_text_cx %}
+                <details>
+                  <summary>Show SWAP as 3 CXs</summary>
+                  <pre>{{ routed_circuit_text_cx }}</pre>
+                  {% if routed_stats_cx %}
+                    <ul class="small">
+                      <li>Qubits: {{ routed_stats_cx.num_qubits }}</li>
+                      <li>Size (operations): {{ routed_stats_cx.size }}</li>
+                      <li>Depth: {{ routed_stats_cx.depth }}</li>
+                      <li>CX depth: {{ routed_stats_cx.cx_depth }}</li>
+                    </ul>
+                  {% endif %}
+                </details>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          {% if routing_compare_results %}
+            <hr>
+            <h6 class="mb-2">Routing comparison</h6>
+
+            {% if routing_compare_analysis_text and ('not configured' not in routing_compare_analysis_text|lower) %}
+              <div class="alert alert-secondary" role="alert">
+                <strong>Routing Comparison Analysis</strong>
+                <div class="small mt-1" style="white-space: pre-wrap;">{{ routing_compare_analysis_text }}</div>
+              </div>
+            {% elif routing_compare_analysis_text and ('not configured' in routing_compare_analysis_text|lower) %}
+              <div class="text-muted small mt-2">Routing comparison analysis unavailable.</div>
+            {% endif %}
+
+
+            {% for item in routing_compare_results %}
+              <div class="mini-card">
+
+                <!-- Top bar: method + Docs button -->
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                  <strong>{{ item.method|capitalize }}</strong>
+
+                  {% if item.docs %}
+                    <a class="btn btn-outline-secondary btn-sm"
+                      href="{{ item.docs }}"
+                      target="_blank"
+                      rel="noopener">
+                      Docs
+                    </a>
+                  {% else %}
+                    <button class="btn btn-outline-secondary btn-sm" type="button" disabled>Docs</button>
+                  {% endif %}
+                </div>
+
+                <!-- Metrics line (dot-separated) under the method name -->
+                <div class="small text-muted mt-1">
+                  {% if item.stats %}
+                    SWAP: {{ item.swap_count if item.swap_count is not none else '—' }}
+                    · Depth: {{ item.stats.depth }}
+                    · Size: {{ item.stats.size }}
+                    · CX depth: {{ item.stats.cx_depth }}
+                  {% else %}
+                    SWAP: {{ item.swap_count if item.swap_count is not none else '—' }}
+                  {% endif %}
+                </div>
+
+                <pre class="mt-2">{{ item.circuit_text }}</pre>
+
+                {% if item.circuit_text_cx %}
+                  <details>
+                    <summary>Show SWAP as 3 CXs</summary>
+                    <pre>{{ item.circuit_text_cx }}</pre>
+                  </details>
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% endif %}
+
+        </div>
+      </div>
+
+      <!-- 5. Translation stage -->
+      <div class="card mb-4" id="section-translation">
+        <div class="card-body">
+          <div class="card-topbar">
+            <h5 class="section-title">5. Translation stage</h5>
+            <button type="submit" class="btn btn-outline-secondary btn-sm" name="action" value="clear_translation" id="clearTranslationTop">
+              Clear
+            </button>
+          </div>
+
+          {% if translation_error %}
+            <div class="alert alert-danger" role="alert">
+              {{ translation_error }}
+            </div>
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="translation_basis" class="form-label">Basis gate set</label>
+              <select class="form-select" id="translation_basis" name="translation_basis">
+                {% for key, gates in translation_basis_options.items() %}
+                  <option value="{{ key }}" {% if key == selected_translation_basis %}selected{% endif %}>
+                    {% if gates %}
+                      ({{ gates|join(", ") }})
+                    {% else %}
+                      (None)
+                    {% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+
+              <div class="hint mt-2">
+                Translation uses <strong>BasisTranslator</strong>
+                (<a href="{{ docs['BasisTranslator'] }}" target="_blank" rel="noopener">Qiskit docs</a>)
+                internally.
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button type="submit" name="action" value="apply_translation" class="btn btn-apply" id="applyTranslationBtn">
+              Apply translation
+            </button>
+          </div>
+
+          {% if translated_circuit_text %}
+            <hr>
+            <h6>After translation</h6>
+            <pre>{{ translated_circuit_text }}</pre>
+
+            {% if translated_stats %}
+              <ul class="small">
+                <li>Qubits: {{ translated_stats.num_qubits }}</li>
+                <li>Size (operations): {{ translated_stats.size }}</li>
+                <li>Depth: {{ translated_stats.depth }}</li>
+                <li>CX depth: {{ translated_stats.cx_depth }}</li>
+              </ul>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+    </form>
+  </div> <!-- /page-wrap -->
+</div> <!-- /container -->
+
+<script>
+/* ============================
+   Docs link updater
+============================ */
+function setDocLinkFromSelect(selectId, linkId) {
+  const sel = document.getElementById(selectId);
+  const a = document.getElementById(linkId);
+  if (!sel || !a) return;
+
+  const opt = sel.options[sel.selectedIndex];
+  const url = (opt && opt.dataset && opt.dataset.doc) ? opt.dataset.doc.trim() : "";
+
+  if (!url) {
+    a.href = "#";
+    a.textContent = "—";
+    a.style.pointerEvents = "none";
+    a.style.opacity = "0.6";
+  } else {
+    a.href = url;
+    a.textContent = "Check the documentation!";
+    a.title = url;
+    a.style.pointerEvents = "auto";
+    a.style.opacity = "1";
+  }
+}
+
+/* ============================
+   Scroll persistence
+============================ */
+function saveScrollY() {
+  try { sessionStorage.setItem("scrollY", String(window.scrollY || 0)); } catch(e) {}
+}
+function restoreScrollYIfAny() {
+  try {
+    const y = sessionStorage.getItem("scrollY");
+    if (y !== null) {
+      sessionStorage.removeItem("scrollY");
+      const yy = parseInt(y, 10);
+      if (!Number.isNaN(yy)) {
+        window.scrollTo(0, yy);
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+/* ============================
+   Focus handling
+============================ */
+function setFocus(sectionId) {
+  const h = document.getElementById("focus_section");
+  if (h) h.value = sectionId;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const restored = restoreScrollYIfAny();
+
+  // Mostra la pagina SOLO dopo che il browser ha applicato lo scroll (evita "scroll visibile")
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.body.classList.remove("preload");
+    });
+  });
+
+  if (restored) return;
+
+  // Se non c'è uno scroll salvato (prima visita / refresh manuale),
+  // allora mantieni il tuo comportamento attuale (focus_section / errori).
+  const focus = (document.getElementById("focus_section")?.value || "").trim();
+  if (focus) {
+    const el = document.getElementById(`section-${focus}`);
+    if (el) el.scrollIntoView({ behavior: "auto", block: "start" });
+    return;
+  }
+
+  const translationErr = document.querySelector("#section-translation .alert-danger");
+  const routingErr = document.querySelector("#section-routing .alert-danger");
+  const layoutErr = document.querySelector("#section-layout .alert-danger");
+  const editorErr = document.querySelector("#section-editor .alert-danger");
+
+  if (translationErr) document.getElementById("section-translation").scrollIntoView({ behavior:"auto", block:"start" });
+  else if (routingErr) document.getElementById("section-routing").scrollIntoView({ behavior:"auto", block:"start" });
+  else if (layoutErr) document.getElementById("section-layout").scrollIntoView({ behavior:"auto", block:"start" });
+  else if (editorErr) document.getElementById("section-editor").scrollIntoView({ behavior:"auto", block:"start" });
+});
+
+
+
+/* ============================
+   SVG Circuit Editor
+============================ */
+let numQubits = parseInt(document.getElementById('num_qubits').value || "3");
+let cols = parseInt(document.getElementById('builder_depth_hidden').value || "10");
+
+const MIN_COLS = 10;
+const EXTEND_STEP = 5;
+cols = Math.max(MIN_COLS, cols);
+
+const leftMargin = 140;
+const topMargin = 30;
+const colW = 60;
+const wireGap = 55;
+const gateW = 40;
+const gateH = 26;
+
+let ops = [];
+let nextOpId = 1;
+
+let twoQMode = false;
+let twoQPending = null;
+
+const svg = document.getElementById("circuitSvg");
+const twoQTool = document.getElementById("twoQTool");
+const twoQStatus = document.getElementById("twoQStatus");
+const twoQGateSelect = document.getElementById("twoQGateSelect");
+
+/* Drag interno SVG (spostamento gate esistenti) */
+let dragState = null; // { opId, pointerId, started, startX, startY, previewG }
+let suppressNextClick = false;
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function ensureOpIds() {
+  for (const op of ops) {
+    if (op.id === undefined || op.id === null) {
+      op.id = nextOpId++;
+    } else {
+      nextOpId = Math.max(nextOpId, (Number(op.id) || 0) + 1);
+    }
+  }
+}
+
+function twoQGate() {
+  return (twoQGateSelect?.value || "cx").toLowerCase();
+}
+
+function setTwoQStatus() {
+  if (!twoQMode) { twoQStatus.textContent = ""; return; }
+  const g = twoQGate();
+  const directed = (g !== "swap");
+  if (!twoQPending) {
+    twoQStatus.textContent = directed ? `${g.toUpperCase()}: click control` : "SWAP: click first qubit";
+  } else {
+    twoQStatus.textContent = directed
+      ? `${g.toUpperCase()}: control q[${twoQPending.a}] → click target`
+      : `SWAP: first q[${twoQPending.a}] → click second`;
+  }
+}
+
+/* snap: col/qubit più vicini al puntatore */
+function snapFromPoint(clientX, clientY) {
+  const pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const sp = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const col = clamp(Math.round((sp.x - leftMargin) / colW), 0, cols - 1);
+  const q = clamp(Math.round((sp.y - topMargin) / wireGap), 0, numQubits - 1);
+  return { col, q };
+}
+
+function getOpById(id) {
+  const n = Number(id);
+  return ops.find(o => Number(o.id) === n) || null;
+}
+
+function opAt(q, col, excludeId=null) {
+  for (const op of ops) {
+    if (excludeId !== null && Number(op.id) === Number(excludeId)) continue;
+    if (op.col !== col) continue;
+    if (!op.qubits || !Array.isArray(op.qubits)) continue;
+    if (op.qubits.length === 1 && op.qubits[0] === q) return op;
+    if (op.qubits.length === 2 && (op.qubits[0] === q || op.qubits[1] === q)) return op;
+  }
+  return null;
+}
+
+function removeOp(op) { ops = ops.filter(o => o !== op); }
+
+/* blocchi colonna per range verticale (2Q blocca intervallo) */
+function colBlockedForRangeExcluding(col, qMin, qMax, excludeId=null) {
+  for (const op of ops) {
+    if (excludeId !== null && Number(op.id) === Number(excludeId)) continue;
+    if (op.col !== col) continue;
+    if (!op.qubits || !Array.isArray(op.qubits)) continue;
+
+    if (op.qubits.length === 1) {
+      const q = op.qubits[0];
+      if (q >= qMin && q <= qMax) return true;
+    } else if (op.qubits.length === 2) {
+      const a = op.qubits[0], b = op.qubits[1];
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      if (!(hi < qMin || lo > qMax)) return true;
+    }
+  }
+  return false;
+}
+
+function occupied(q, col, excludeId=null) {
+  return colBlockedForRangeExcluding(col, q, q, excludeId);
+}
+
+function extendCols(extra=EXTEND_STEP) { cols += Math.max(1, extra); }
+
+/* --- NEW: colonna libera più vicina (tie -> destra) --- */
+function nearestFreeColForQubit(q, desiredCol, excludeId=null) {
+  desiredCol = clamp(desiredCol, 0, cols - 1);
+
+  // prima prova dentro i cols correnti
+  for (let d = 0; d < cols; d++) {
+    const cR = desiredCol + d;
+    if (cR >= 0 && cR < cols && !occupied(q, cR, excludeId)) return cR;
+
+    if (d > 0) {
+      const cL = desiredCol - d;
+      if (cL >= 0 && cL < cols && !occupied(q, cL, excludeId)) return cL;
+    }
+  }
+
+  // estendi e riprova (una volta basta di solito, ma facciamo robusto)
+  const old = cols;
+  extendCols();
+  for (let d = 0; d < cols; d++) {
+    const cR = desiredCol + d;
+    if (cR >= 0 && cR < cols && !occupied(q, cR, excludeId)) return cR;
+    if (d > 0) {
+      const cL = desiredCol - d;
+      if (cL >= 0 && cL < cols && !occupied(q, cL, excludeId)) return cL;
+    }
+  }
+  // se l’utente droppa “oltre”, possiamo anche cercare solo a destra oltre old
+  for (let c = old; c < cols; c++) if (!occupied(q, c, excludeId)) return c;
+
+  return null;
+}
+
+function nearestFreeColFor2Q(a, b, desiredCol, excludeId=null) {
+  desiredCol = clamp(desiredCol, 0, cols - 1);
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+
+  for (let d = 0; d < cols; d++) {
+    const cR = desiredCol + d;
+    if (cR >= 0 && cR < cols && !colBlockedForRangeExcluding(cR, lo, hi, excludeId)) return cR;
+
+    if (d > 0) {
+      const cL = desiredCol - d;
+      if (cL >= 0 && cL < cols && !colBlockedForRangeExcluding(cL, lo, hi, excludeId)) return cL;
+    }
+  }
+
+  const old = cols;
+  extendCols();
+  for (let d = 0; d < cols; d++) {
+    const cR = desiredCol + d;
+    if (cR >= 0 && cR < cols && !colBlockedForRangeExcluding(cR, lo, hi, excludeId)) return cR;
+
+    if (d > 0) {
+      const cL = desiredCol - d;
+      if (cL >= 0 && cL < cols && !colBlockedForRangeExcluding(cL, lo, hi, excludeId)) return cL;
+    }
+  }
+  for (let c = old; c < cols; c++) {
+    if (!colBlockedForRangeExcluding(c, lo, hi, excludeId)) return c;
+  }
+  return null;
+}
+
+/* Inserimento da palette: se c’è 1Q nella cella, la sostituisco. Se c’è 2Q, cerco vicino. */
+function add1qFromPalette(gate, q, desiredCol) {
+  // se la cella "puntata" non è bloccata da 2Q, uso proprio quella colonna (e sostituisco eventuale 1Q)
+  if (!colBlockedForRangeExcluding(desiredCol, q, q, null)) {
+    const existing = opAt(q, desiredCol, null);
+    if (existing) {
+      if (existing.qubits.length === 2) return false;
+      removeOp(existing);
+    }
+    ops.push({ id: nextOpId++, gate, qubits: [q], col: desiredCol });
+    return true;
+  }
+
+  // altrimenti: trova colonna libera più vicina (qui NON sovrascrivo altri gate: scelgo slot libero)
+  const c0 = nearestFreeColForQubit(q, desiredCol, null);
+  if (c0 === null) return false;
+
+  // in c0 dovrebbe essere libero; se per qualche ragione c’è un 1Q, lo sostituiamo (coerente con palette)
+  const existing2 = opAt(q, c0, null);
+  if (existing2) {
+    if (existing2.qubits.length === 2) return false;
+    removeOp(existing2);
+  }
+  ops.push({ id: nextOpId++, gate, qubits: [q], col: c0 });
+  return true;
+}
+
+/* Inserimento 2Q: non sovrascrivo mai. */
+function add2q(gate, a, b, col) {
+  if (a === b) return false;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  if (colBlockedForRangeExcluding(col, lo, hi, null)) return false;
+  ops.push({ id: nextOpId++, gate, qubits:[a, b], col });
+  return true;
+}
+
+function serialize() {
+  return JSON.stringify({ num_qubits: numQubits, depth: cols, ops: ops });
+}
+
+function markDirty() {
+  const h = document.getElementById("layout_for_hash");
+  if (h) h.value = "";
+
+  const ll = document.getElementById("layout_list_str");
+  if (ll) ll.value = "";
+
+  const rq = document.getElementById("routed_qasm_str");
+  const rh = document.getElementById("routed_for_hash");
+  if (rq) rq.value = "";
+  if (rh) rh.value = "";
+}
+
+function syncHidden() {
+  document.getElementById("circuit_json").value = serialize();
+  document.getElementById("builder_depth_hidden").value = String(cols);
+}
+
+function loadFromHidden() {
+  const hidden = document.getElementById("circuit_json").value;
+  if (!hidden || !hidden.trim()) return false;
+  try {
+    const obj = JSON.parse(hidden);
+    numQubits = obj.num_qubits;
+    cols = Math.max(MIN_COLS, parseInt(obj.depth || MIN_COLS));
+    ops = Array.isArray(obj.ops) ? obj.ops : [];
+    ensureOpIds();
+    document.getElementById("num_qubits").value = String(numQubits);
+    return true;
+  } catch (e) { return false; }
+}
+
+function clearAllLocal() {
+  ops = [];
+  cols = Math.max(MIN_COLS, 10);
+  nextOpId = 1;
+
+  twoQMode = false;
+  twoQPending = null;
+  twoQTool.classList.remove("active");
+  setTwoQStatus();
+
+  markDirty();
+  draw();
+  syncHidden();
+}
+
+function svgSetSize() {
+  const width = leftMargin + cols * colW + 40;
+  const height = topMargin + (numQubits - 1) * wireGap + 60;
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+}
+
+function drawWireWithGaps(y, centers) {
+  const xStart = leftMargin;
+  const xEnd = leftMargin + (cols - 1) * colW + 20;
+
+  const gapHalf = gateW / 2 + 4;
+  let cur = xStart;
+
+  for (const xc of centers) {
+    const g1 = xc - gapHalf;
+    const g2 = xc + gapHalf;
+
+    if (g1 > cur) {
+      const seg = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      seg.setAttribute("x1", cur);
+      seg.setAttribute("x2", g1);
+      seg.setAttribute("y1", y);
+      seg.setAttribute("y2", y);
+      seg.setAttribute("stroke", "#a24b79");
+      seg.setAttribute("stroke-width", "2");
+      svg.appendChild(seg);
+    }
+    cur = Math.max(cur, g2);
+  }
+
+  if (cur < xEnd) {
+    const seg = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    seg.setAttribute("x1", cur);
+    seg.setAttribute("x2", xEnd);
+    seg.setAttribute("y1", y);
+    seg.setAttribute("y2", y);
+    seg.setAttribute("stroke", "#a24b79");
+    seg.setAttribute("stroke-width", "2");
+    svg.appendChild(seg);
+  }
+}
+
+function drawVertical(x, yA, yB) {
+  const seg = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  seg.setAttribute("x1", x);
+  seg.setAttribute("x2", x);
+  seg.setAttribute("y1", yA);
+  seg.setAttribute("y2", yB);
+  seg.setAttribute("stroke", "#123a6f");
+  seg.setAttribute("stroke-width", "2");
+  return seg;
+}
+
+function gateLabel(g) {
+  const gg = (g || "").toLowerCase();
+  if (gg === "sdg") return "S†";
+  if (gg === "tdg") return "T†";
+  if (gg === "sxdg") return "SX†";
+  if (gg === "id") return "I";
+  return gg.toUpperCase();
+}
+
+function drawSwapSymbol(x, y) {
+  const grp = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const l1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  l1.setAttribute("x1", x - 8); l1.setAttribute("y1", y - 8);
+  l1.setAttribute("x2", x + 8); l1.setAttribute("y2", y + 8);
+  l1.setAttribute("stroke", "#123a6f"); l1.setAttribute("stroke-width", "2");
+  grp.appendChild(l1);
+
+  const l2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  l2.setAttribute("x1", x - 8); l2.setAttribute("y1", y + 8);
+  l2.setAttribute("x2", x + 8); l2.setAttribute("y2", y - 8);
+  l2.setAttribute("stroke", "#123a6f"); l2.setAttribute("stroke-width", "2");
+  grp.appendChild(l2);
+
+  return grp;
+}
+
+function drawTargetCircle(x, y, label) {
+  const grp = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const circ = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  circ.setAttribute("cx", x);
+  circ.setAttribute("cy", y);
+  circ.setAttribute("r", "11");
+  circ.setAttribute("fill", "#ffffff");
+  circ.setAttribute("stroke", "#123a6f");
+  circ.setAttribute("stroke-width", "2");
+  grp.appendChild(circ);
+
+  if (label === "+") {
+    const h = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    h.setAttribute("x1", x - 7); h.setAttribute("x2", x + 7);
+    h.setAttribute("y1", y); h.setAttribute("y2", y);
+    h.setAttribute("stroke", "#123a6f"); h.setAttribute("stroke-width", "2");
+    grp.appendChild(h);
+
+    const v = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    v.setAttribute("x1", x); v.setAttribute("x2", x);
+    v.setAttribute("y1", y - 7); v.setAttribute("y2", y + 7);
+    v.setAttribute("stroke", "#123a6f"); v.setAttribute("stroke-width", "2");
+    grp.appendChild(v);
+  } else {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x);
+    t.setAttribute("y", y + 5);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("font-family", "monospace");
+    t.setAttribute("font-size", "14");
+    t.setAttribute("font-weight", "900");
+    t.setAttribute("fill", "#123a6f");
+    t.textContent = label;
+    grp.appendChild(t);
+  }
+  return grp;
+}
+
+/* --- preview durante drag interno --- */
+function ensurePreviewGroup() {
+  if (dragState && dragState.previewG) return dragState.previewG;
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("pointer-events", "none");
+  svg.appendChild(g);
+  if (dragState) dragState.previewG = g;
+  return g;
+}
+function clearPreviewGroup() {
+  if (dragState && dragState.previewG) {
+    dragState.previewG.remove();
+    dragState.previewG = null;
+  }
+}
+
+/* ---------- Column highlight + moving ghost ---------- */
+function drawColumnHighlights(desiredCol, candidates, okCol=null) {
+  // candidates: array of cols to show
+  // okCol: selected nearest free col (or null)
+  const g = ensurePreviewGroup();
+  // Do not wipe the whole preview if there is already other preview;
+  // we manage highlights in a dedicated subgroup.
+  let hg = g.querySelector("[data-preview='highlights']");
+  if (!hg) {
+    hg = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    hg.setAttribute("data-preview", "highlights");
+    g.appendChild(hg);
+  }
+  hg.innerHTML = "";
+
+  const yTop = topMargin - 22;
+  const h = (numQubits - 1) * wireGap + 44;
+
+  for (const c of candidates) {
+    const x = leftMargin + c * colW;
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x", x - colW / 2 + 4);
+    r.setAttribute("y", yTop);
+    r.setAttribute("width", colW - 8);
+    r.setAttribute("height", h);
+    r.setAttribute("rx", "10");
+    r.classList.add("col-highlight");
+    hg.appendChild(r);
+  }
+
+  // If desiredCol is blocked (no free near), mark it "bad"
+  if (okCol === null) {
+    const x = leftMargin + desiredCol * colW;
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x", x - colW / 2 + 4);
+    r.setAttribute("y", yTop);
+    r.setAttribute("width", colW - 8);
+    r.setAttribute("height", h);
+    r.setAttribute("rx", "10");
+    r.classList.add("col-highlight", "bad");
+    hg.appendChild(r);
+  }
+}
+
+function clearColumnHighlights() {
+  if (!dragState || !dragState.previewG) return;
+  const hg = dragState.previewG.querySelector("[data-preview='highlights']");
+  if (hg) hg.remove();
+}
+
+function drawGhostAt(clientX, clientY, labelText) {
+  const g = ensurePreviewGroup();
+  let gg = g.querySelector("[data-preview='ghost']");
+  if (!gg) {
+    gg = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    gg.setAttribute("data-preview", "ghost");
+    gg.setAttribute("pointer-events", "none");
+
+    const bubble = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bubble.setAttribute("rx", "8");
+    bubble.setAttribute("fill", "#ffffff");
+    bubble.setAttribute("stroke", "#123a6f");
+    bubble.setAttribute("stroke-width", "2");
+    bubble.setAttribute("opacity", "0.95");
+    bubble.setAttribute("data-ghost", "bubble");
+    gg.appendChild(bubble);
+
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.classList.add("ghost-label");
+    t.setAttribute("data-ghost", "text");
+    gg.appendChild(t);
+
+    g.appendChild(gg);
+  }
+
+  const pt = svg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const sp = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+  const t = gg.querySelector("[data-ghost='text']");
+  t.textContent = labelText;
+
+  // Measure text roughly (monospace): width ≈ 7px per char
+  const padX = 10, padY = 6;
+  const w = Math.max(24, labelText.length * 7 + padX * 2);
+  const h = 22;
+
+  const bubble = gg.querySelector("[data-ghost='bubble']");
+  bubble.setAttribute("width", w);
+  bubble.setAttribute("height", h);
+
+  // Offset from cursor (so it doesn't hide target)
+  const ox = 14, oy = -28;
+  const x = sp.x + ox;
+  const y = sp.y + oy;
+
+  bubble.setAttribute("x", x);
+  bubble.setAttribute("y", y);
+
+  t.setAttribute("x", x + w/2);
+  t.setAttribute("y", y + 15);
+  t.setAttribute("text-anchor", "middle");
+}
+
+function clearGhost() {
+  if (!dragState || !dragState.previewG) return;
+  const gg = dragState.previewG.querySelector("[data-preview='ghost']");
+  if (gg) gg.remove();
+}
+
+function drawPreview1Q(col, q, ok) {
+  const g = ensurePreviewGroup();
+  g.innerHTML = "";
+  const x = leftMargin + col * colW;
+  const y = topMargin + q * wireGap;
+
+  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  r.setAttribute("x", x - gateW/2);
+  r.setAttribute("y", y - gateH/2);
+  r.setAttribute("width", gateW);
+  r.setAttribute("height", gateH);
+  r.setAttribute("rx", "6");
+  r.setAttribute("fill", "none");
+  r.setAttribute("stroke", ok ? "#123a6f" : "#cc0669");
+  r.setAttribute("stroke-width", "2");
+  r.setAttribute("stroke-dasharray", "4 3");
+  g.appendChild(r);
+}
+function drawPreview2Q(col, a, b, ok) {
+  const g = ensurePreviewGroup();
+  g.innerHTML = "";
+  const x = leftMargin + col * colW;
+  const y1 = topMargin + a * wireGap;
+  const y2 = topMargin + b * wireGap;
+
+  const ln = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  ln.setAttribute("x1", x); ln.setAttribute("x2", x);
+  ln.setAttribute("y1", y1); ln.setAttribute("y2", y2);
+  ln.setAttribute("stroke", ok ? "#123a6f" : "#cc0669");
+  ln.setAttribute("stroke-width", "2");
+  ln.setAttribute("stroke-dasharray", "4 3");
+  g.appendChild(ln);
+}
+
+function draw() {
+  svgSetSize();
+  svg.innerHTML = "";
+
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("x", "0");
+  bg.setAttribute("y", "0");
+  bg.setAttribute("width", "100%");
+  bg.setAttribute("height", "100%");
+  bg.setAttribute("fill", "#fff");
+  svg.appendChild(bg);
+
+  const gapsByQ = Array.from({length: numQubits}, () => []);
+  for (const op of ops) {
+    if (op.qubits.length === 1) {
+      const q = op.qubits[0];
+      const x = leftMargin + op.col * colW;
+      if (q >= 0 && q < numQubits) gapsByQ[q].push(x);
+    }
+  }
+  for (let q = 0; q < numQubits; q++) gapsByQ[q].sort((a,b)=>a-b);
+
+  for (let q = 0; q < numQubits; q++) {
+    const y = topMargin + q * wireGap;
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", 12);
+    label.setAttribute("y", y + 5);
+    label.setAttribute("text-anchor", "start");
+    label.setAttribute("font-family", "monospace");
+    label.setAttribute("font-size", "14");
+    label.textContent = `q_${q}: |0\u27E9`;
+    svg.appendChild(label);
+
+    drawWireWithGaps(y, gapsByQ[q]);
+  }
+
+  for (let c = 0; c < cols; c++) {
+    const x = leftMargin + c * colW;
+    const guide = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    guide.setAttribute("x1", x);
+    guide.setAttribute("x2", x);
+    guide.setAttribute("y1", topMargin - 20);
+    guide.setAttribute("y2", topMargin + (numQubits - 1) * wireGap + 20);
+    guide.setAttribute("stroke", "#f3c0d8");
+    guide.setAttribute("stroke-width", "1");
+    guide.setAttribute("opacity", "0.35");
+    svg.appendChild(guide);
+  }
+
+  /* ops */
+  for (const op of ops) {
+    const c = op.col;
+    const x = leftMargin + c * colW;
+
+    const gOp = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    gOp.setAttribute("data-op-id", String(op.id));
+    gOp.classList.add("op-hit");
+
+    if (op.qubits.length === 2) {
+      const a = op.qubits[0];
+      const b = op.qubits[1];
+      const y1 = topMargin + a * wireGap;
+      const y2 = topMargin + b * wireGap;
+
+      /* hitbox trasparente (per prendere bene il drag) */
+      const hit = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      hit.setAttribute("x", x - (gateW/2 + 10));
+      hit.setAttribute("y", Math.min(y1,y2) - 16);
+      hit.setAttribute("width", gateW + 20);
+      hit.setAttribute("height", Math.abs(y2-y1) + 32);
+      hit.setAttribute("fill", "transparent");
+      gOp.appendChild(hit);
+
+      gOp.appendChild(drawVertical(x, y1, y2));
+
+      const gg = (op.gate || "").toLowerCase();
+      if (gg === "swap") {
+        gOp.appendChild(drawSwapSymbol(x, y1));
+        gOp.appendChild(drawSwapSymbol(x, y2));
+      } else {
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", x);
+        dot.setAttribute("cy", y1);
+        dot.setAttribute("r", "6");
+        dot.setAttribute("fill", "#123a6f");
+        gOp.appendChild(dot);
+
+        if (gg === "cx") gOp.appendChild(drawTargetCircle(x, y2, "+"));
+        else if (gg === "cy") gOp.appendChild(drawTargetCircle(x, y2, "Y"));
+        else gOp.appendChild(drawTargetCircle(x, y2, "Z"));
+      }
+    } else {
+      const q = op.qubits[0];
+      const y = topMargin + q * wireGap;
+
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", x - gateW/2);
+      rect.setAttribute("y", y - gateH/2);
+      rect.setAttribute("width", gateW);
+      rect.setAttribute("height", gateH);
+      rect.setAttribute("rx", "6");
+      rect.setAttribute("fill", "#ffffff");
+      rect.setAttribute("stroke", "#cc0669");
+      rect.setAttribute("stroke-width", "2");
+      gOp.appendChild(rect);
+
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", x);
+      text.setAttribute("y", y + 5);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("font-weight", "800");
+      text.setAttribute("font-family", "sans-serif");
+      text.setAttribute("font-size", "14");
+      text.setAttribute("fill", "#cc0669");
+      text.textContent = gateLabel(op.gate);
+      text.style.pointerEvents = "none";
+      gOp.appendChild(text);
+    }
+
+    svg.appendChild(gOp);
+  }
+}
+
+/* CLICK: rimozione o 2Q placement */
+function handleSvgClick(e) {
+  if (suppressNextClick) { suppressNextClick = false; return; }
+  if (dragState && dragState.started) return;
+
+  const { col, q } = snapFromPoint(e.clientX, e.clientY);
+
+  const existing = opAt(q, col);
+  if (existing) {
+    removeOp(existing);
+    twoQPending = null;
+    setTwoQStatus();
+    markDirty();
+    draw();
+    syncHidden();
+    return;
+  }
+
+  if (twoQMode) {
+    if (!twoQPending) {
+      twoQPending = { a: q };
+      setTwoQStatus();
+      return;
+    } else {
+      const a = twoQPending.a;
+      const b = q;
+      const g = twoQGate();
+      const c0 = nearestFreeColFor2Q(a, b, col, null);
+      if (c0 === null) { alert("No free space for 2Q gate."); return; }
+      const ok = add2q(g, a, b, c0);
+      if (!ok) { alert("Cannot place 2Q gate."); return; }
+
+      twoQPending = null;
+      twoQMode = false;
+      twoQTool.classList.remove("active");
+      setTwoQStatus();
+
+      markDirty();
+      draw();
+      syncHidden();
+      return;
+    }
+  }
+}
+
+/* DROP da palette (HTML DnD) */
+function handleDropOnSvg(e) {
+  e.preventDefault();
+  const gate = e.dataTransfer.getData("text/gate");
+  if (!gate) return;
+
+  const { q, col } = snapFromPoint(e.clientX, e.clientY);
+  const ok = add1qFromPalette(gate, q, col);
+  if (!ok) { alert("Cannot place gate."); return; }
+
+  markDirty();
+  draw();
+  syncHidden();
+}
+
+/* ----------------------------
+   Drag interno: sposta gate già posizionate
+   - 1Q: può cambiare qubit e colonna (slot libero più vicino)
+   - 2Q: cambia solo colonna (slot libero più vicino)
+---------------------------- */
+function startInternalDrag(e, opId) {
+  const op = getOpById(opId);
+  if (!op) return;
+
+  // se stai usando il tool 2Q, non iniziare drag (evita conflitti)
+  if (twoQMode) return;
+
+  dragState = {
+    opId: Number(opId),
+    pointerId: e.pointerId,
+    started: false,
+    startX: e.clientX,
+    startY: e.clientY,
+    opSnapshot: { col: op.col, qubits: [...op.qubits] },
+    opType: op.qubits.length,
+    previewG: null
+  };
+
+  try { svg.setPointerCapture(e.pointerId); } catch {}
+  e.preventDefault();
+}
+
+function updateInternalDrag(e) {
+  if (!dragState) return;
+
+  const dx = e.clientX - dragState.startX;
+  const dy = e.clientY - dragState.startY;
+  const dist = Math.hypot(dx, dy);
+
+  if (!dragState.started && dist > 3) {
+    dragState.started = true;
+  }
+  if (!dragState.started) return;
+
+  const op = getOpById(dragState.opId);
+  if (!op) return;
+
+  const { q, col } = snapFromPoint(e.clientX, e.clientY);
+
+  // columns to highlight around the target (±3)
+  const cand = [];
+  for (let d = -3; d <= 3; d++) {
+    const cc = col + d;
+    if (cc >= 0 && cc < cols) cand.push(cc);
+  }
+
+  if (op.qubits.length === 1) {
+    const targetQ = q;
+    const c0 = nearestFreeColForQubit(targetQ, col, op.id);
+    const ok = (c0 !== null);
+
+    // preview slot + highlight columns
+    clearColumnHighlights();
+    drawColumnHighlights(col, cand, ok ? c0 : null);
+
+    if (ok) drawPreview1Q(c0, targetQ, true);
+    else drawPreview1Q(col, targetQ, false);
+
+    drawGhostAt(e.clientX, e.clientY, gateLabel(op.gate));
+  } else {
+    const a = op.qubits[0], b = op.qubits[1];
+    const c0 = nearestFreeColFor2Q(a, b, col, op.id);
+    const ok = (c0 !== null);
+
+    clearColumnHighlights();
+    drawColumnHighlights(col, cand, ok ? c0 : null);
+
+    if (ok) drawPreview2Q(c0, a, b, true);
+    else drawPreview2Q(col, a, b, false);
+
+    drawGhostAt(e.clientX, e.clientY, (op.gate || "").toUpperCase());
+  }
+}
+
+
+function endInternalDrag(e) {
+  if (!dragState) return;
+
+  const op = getOpById(dragState.opId);
+
+  const didDrag = !!dragState.started;
+  clearPreviewGroup();
+
+  try { svg.releasePointerCapture(dragState.pointerId); } catch {}
+
+  if (didDrag && op) {
+    const { q, col } = snapFromPoint(e.clientX, e.clientY);
+
+    if (op.qubits.length === 1) {
+      const targetQ = q;
+      const c0 = nearestFreeColForQubit(targetQ, col, op.id);
+      if (c0 !== null) {
+        // qui garantiamo slot libero (nearestFreeCol… usa occupied con exclude op.id)
+        op.qubits = [targetQ];
+        op.col = c0;
+
+        markDirty();
+        draw();
+        syncHidden();
+
+        suppressNextClick = true; // evita click “fantasma” che cancellerebbe
+      } else {
+        // revert
+        op.col = dragState.opSnapshot.col;
+        op.qubits = [...dragState.opSnapshot.qubits];
+        draw();
+      }
+    } else {
+      const a = op.qubits[0], b = op.qubits[1];
+      const c0 = nearestFreeColFor2Q(a, b, col, op.id);
+      if (c0 !== null) {
+        op.col = c0;
+
+        markDirty();
+        draw();
+        syncHidden();
+
+        suppressNextClick = true;
+      } else {
+        op.col = dragState.opSnapshot.col;
+        draw();
+      }
+    }
+  }
+
+  dragState = null;
+}
+
+/* Delegation: intercetto pointerdown su gate già disegnate */
+svg.addEventListener("pointerdown", (e) => {
+  // solo tasto sinistro / primary
+  if (e.button !== undefined && e.button !== 0) return;
+
+  const tgt = e.target;
+  const g = tgt && tgt.closest ? tgt.closest("[data-op-id]") : null;
+  if (!g) return;
+
+  startInternalDrag(e, g.getAttribute("data-op-id"));
+});
+svg.addEventListener("pointermove", (e) => updateInternalDrag(e));
+svg.addEventListener("pointerup", (e) => endInternalDrag(e));
+svg.addEventListener("pointercancel", (e) => endInternalDrag(e));
+
+/* Palette drag */
+document.querySelectorAll(".gate").forEach(g => {
+  g.addEventListener("dragstart", (e) => {
+    e.dataTransfer.setData("text/gate", g.dataset.gate);
+  });
+});
+
+svg.addEventListener("dragover", (e) => e.preventDefault());
+svg.addEventListener("drop", handleDropOnSvg);
+svg.addEventListener("click", handleSvgClick);
+
+twoQTool.addEventListener("click", () => {
+  twoQMode = !twoQMode;
+  twoQPending = null;
+  twoQTool.classList.toggle("active", twoQMode);
+  setTwoQStatus();
+});
+
+twoQGateSelect.addEventListener("change", () => {
+  if (twoQMode) {
+    twoQPending = null;
+    setTwoQStatus();
+  }
+});
+
+document.getElementById("applyEditorBtn").addEventListener("click", () => {
+  const nq = parseInt(document.getElementById("num_qubits").value || "3");
+  numQubits = Math.max(1, nq);
+
+  ops = ops.filter(op => {
+    if (!op.qubits || !Array.isArray(op.qubits)) return false;
+    if (op.qubits.length === 2) {
+      const a = op.qubits[0], b = op.qubits[1];
+      return a >= 0 && a < numQubits && b >= 0 && b < numQubits && a !== b;
+    } else {
+      const a = op.qubits[0];
+      return a >= 0 && a < numQubits;
+    }
+  });
+
+  ensureOpIds();
+
+  twoQMode = false;
+  twoQPending = null;
+  twoQTool.classList.remove("active");
+  setTwoQStatus();
+
+  markDirty();
+  draw();
+  syncHidden();
+  drawCouplingMap();
+});
+
+/* ============================
+   Coupling map + layout map
+============================ */
+const couplingSel = document.getElementById("map_type");
+const couplingSvg = document.getElementById("couplingSvg");
+const mapLegend = document.getElementById("mapLegend");
+const mapNote = document.getElementById("mapNote");
+
+const layoutMapWrap = document.getElementById("layoutMapWrap");
+const layoutMapSvg = document.getElementById("layoutMapSvg");
+const layoutMapNote = document.getElementById("layoutMapNote");
+
+function svgEl(name) { return document.createElementNS("http://www.w3.org/2000/svg", name); }
+function clearSvg(s) { s.innerHTML = ""; }
+
+function drawDefs(s) {
+  const defs = svgEl("defs");
+
+  const grad = svgEl("linearGradient");
+  grad.setAttribute("id", "edgeGrad");
+  grad.setAttribute("x1", "0"); grad.setAttribute("y1", "0");
+  grad.setAttribute("x2", "1"); grad.setAttribute("y2", "0");
+
+  const s1 = svgEl("stop"); s1.setAttribute("offset", "0%");  s1.setAttribute("stop-color", "#cc0669"); s1.setAttribute("stop-opacity", "0.55");
+  const s2 = svgEl("stop"); s2.setAttribute("offset", "100%"); s2.setAttribute("stop-color", "#123a6f"); s2.setAttribute("stop-opacity", "0.55");
+  grad.appendChild(s1); grad.appendChild(s2);
+  defs.appendChild(grad);
+
+  const filter = svgEl("filter");
+  filter.setAttribute("id", "softShadow");
+  filter.setAttribute("x", "-20%"); filter.setAttribute("y", "-20%");
+  filter.setAttribute("width", "140%"); filter.setAttribute("height", "140%");
+  const feDrop = svgEl("feDropShadow");
+  feDrop.setAttribute("dx", "0");
+  feDrop.setAttribute("dy", "2");
+  feDrop.setAttribute("stdDeviation", "2");
+  feDrop.setAttribute("flood-color", "#000");
+  feDrop.setAttribute("flood-opacity", "0.18");
+  filter.appendChild(feDrop);
+  defs.appendChild(filter);
+
+  s.appendChild(defs);
+}
+
+function edge(s, x1,y1,x2,y2, curved=true) {
+  if (!curved) {
+    const ln = svgEl("line");
+    ln.setAttribute("x1", x1); ln.setAttribute("y1", y1);
+    ln.setAttribute("x2", x2); ln.setAttribute("y2", y2);
+    ln.setAttribute("stroke", "url(#edgeGrad)");
+    ln.setAttribute("stroke-width", "3");
+    ln.setAttribute("opacity", "0.9");
+    ln.setAttribute("stroke-linecap", "round");
+    s.appendChild(ln);
+    return;
+  }
+  const path = svgEl("path");
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.max(1, Math.hypot(dx,dy));
+  const nx = -dy / len, ny = dx / len;
+  const bend = 18;
+
+  const cx = mx + nx * bend;
+  const cy = my + ny * bend;
+
+  path.setAttribute("d", `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "url(#edgeGrad)");
+  path.setAttribute("stroke-width", "3");
+  path.setAttribute("opacity", "0.85");
+  path.setAttribute("stroke-linecap", "round");
+  s.appendChild(path);
+}
+
+function node(s, x,y, physLabel, logicalLabel=null) {
+  const g = svgEl("g");
+
+  const c = svgEl("circle");
+  c.setAttribute("cx", x); c.setAttribute("cy", y);
+  c.setAttribute("r", "18");
+  c.setAttribute("fill", "#ffffff");
+  c.setAttribute("stroke", "#123a6f");
+  c.setAttribute("stroke-width", "3");
+  c.setAttribute("filter", "url(#softShadow)");
+  g.appendChild(c);
+
+  const t = svgEl("text");
+  t.setAttribute("x", x);
+  t.setAttribute("y", y + 6);
+  t.setAttribute("text-anchor", "middle");
+  t.setAttribute("font-family", "monospace");
+  t.setAttribute("font-size", "14");
+  t.setAttribute("font-weight", "900");
+  t.setAttribute("fill", "#cc0669");
+  t.textContent = physLabel;
+  g.appendChild(t);
+
+  if (logicalLabel !== null && logicalLabel !== undefined && logicalLabel !== "") {
+    const u = svgEl("text");
+    u.setAttribute("x", x);
+    u.setAttribute("y", y - 26);
+    u.setAttribute("text-anchor", "middle");
+    u.setAttribute("font-family", "monospace");
+    u.setAttribute("font-size", "12");
+    u.setAttribute("font-weight", "900");
+    u.setAttribute("fill", "#123a6f");
+    u.textContent = logicalLabel;
+    g.appendChild(u);
+  }
+
+  s.appendChild(g);
+}
+
+function bbox(pts) {
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for (const p of pts) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  if (!isFinite(minX)) return {minX:0,minY:0,maxX:1,maxY:1,w:1,h:1};
+  return {minX, minY, maxX, maxY, w: (maxX-minX)||1, h: (maxY-minY)||1};
+}
+
+function fitAndCenter(pts, boxX, boxY, boxW, boxH, pad=22) {
+  const innerX = boxX + pad;
+  const innerY = boxY + pad;
+  const innerW = Math.max(10, boxW - 2*pad);
+  const innerH = Math.max(10, boxH - 2*pad);
+
+  const b = bbox(pts);
+  const sx = innerW / b.w;
+  const sy = innerH / b.h;
+  const s = Math.min(sx, sy);
+
+  const scaledW = b.w * s;
+  const scaledH = b.h * s;
+
+  const tx = innerX + (innerW - scaledW)/2 - b.minX * s;
+  const ty = innerY + (innerH - scaledH)/2 - b.minY * s;
+
+  return pts.map(p => ({ x: p.x*s + tx, y: p.y*s + ty }));
+}
+
+function lineLayoutNorm(n) {
+  if (n <= 1) return [{x:0.5, y:0.5}];
+  const pts = [];
+  for (let i=0;i<n;i++){
+    const t = (n===1) ? 0 : i/(n-1);
+    const y = 0.5 + 0.07*Math.sin(t*Math.PI - Math.PI/2);
+    pts.push({ x: t, y });
+  }
+  return pts;
+}
+
+function circleLayoutNorm(n) {
+  const pts = [];
+  const cx = 0.5, cy = 0.5, r = 0.35;
+  for (let i=0;i<n;i++){
+    const a = -Math.PI/2 + (2*Math.PI*i)/n;
+    pts.push({ x: cx + r*Math.cos(a), y: cy + r*Math.sin(a) });
+  }
+  return pts;
+}
+
+function drawMapInto(s, type, n, legendEl, noteEl, overlayPhysToLogical=null) {
+  clearSvg(s);
+  drawDefs(s);
+
+  if (n <= 1) {
+    if (legendEl) legendEl.textContent = "";
+    if (noteEl) noteEl.textContent = "With 1 qubit, connectivity constraints are not relevant.";
+    node(s, 450, 110, "0", overlayPhysToLogical ? (overlayPhysToLogical[0] ?? "") : null);
+    return;
+  }
+
+  const isLayout = (s === layoutMapSvg);
+  const bgX = 14, bgY = 18, bgW = 872, bgH = isLayout ? 204 : 184;
+
+  const bg = svgEl("rect");
+  bg.setAttribute("x", String(bgX));
+  bg.setAttribute("y", String(bgY));
+  bg.setAttribute("width", String(bgW));
+  bg.setAttribute("height", String(bgH));
+  bg.setAttribute("rx", "16");
+  bg.setAttribute("fill", "#fff7fb");
+  bg.setAttribute("stroke", "#f0b6d3");
+  bg.setAttribute("stroke-width", "2");
+  s.appendChild(bg);
+
+  const t = (type || "none").toLowerCase();
+
+  let ptsNorm = [];
+  if (t === "line") {
+    if (noteEl) noteEl.textContent = "Nearest-neighbor connectivity (bidirectional)";
+    ptsNorm = lineLayoutNorm(n);
+  } else if (t === "ring") {
+    if (noteEl) noteEl.textContent = "Nearest-neighbor + closing edge (bidirectional)";
+    ptsNorm = circleLayoutNorm(n);
+  } else if (t === "full") {
+    if (noteEl) noteEl.textContent = "Any qubit pair can interact (bidirectional)";
+    ptsNorm = circleLayoutNorm(n);
+  } else {
+    if (noteEl) noteEl.textContent = "No coupling constraints enforced";
+    ptsNorm = circleLayoutNorm(n);
+  }
+
+  const pts = fitAndCenter(ptsNorm, bgX, bgY, bgW, bgH, 24);
+
+  if (t === "line") {
+    for (let i=0;i<n-1;i++){
+      edge(s, pts[i].x, pts[i].y, pts[i+1].x, pts[i+1].y, true);
+    }
+  } else if (t === "ring") {
+    for (let i=0;i<n;i++){
+      const j = (i+1)%n;
+      edge(s, pts[i].x, pts[i].y, pts[j].x, pts[j].y, true);
+    }
+  } else if (t === "full") {
+    for (let i=0;i<n;i++){
+      for (let j=i+1;j<n;j++){
+        edge(s, pts[i].x, pts[i].y, pts[j].x, pts[j].y, true);
+      }
+    }
+  }
+
+  for (let p=0;p<n;p++){
+    const logical = overlayPhysToLogical ? (overlayPhysToLogical[p] ?? "") : null;
+    node(s, pts[p].x, pts[p].y, String(p), logical);
+  }
+}
+
+function parseLayoutListStr() {
+  const s = (document.getElementById("layout_list_str")?.value || "").trim();
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    try {
+      return Function(`"use strict"; return (${s});`)();
+    } catch {
+      return null;
+    }
+  }
+}
+
+function drawCouplingMap() {
+  const n = Math.max(1, parseInt(document.getElementById("num_qubits").value || "1"));
+  const type = (couplingSel?.value || "none").toLowerCase();
+  drawMapInto(couplingSvg, type, n, mapLegend, mapNote, null);
+}
+
+function drawLayoutMapIfAvailable() {
+  const n = Math.max(1, parseInt(document.getElementById("num_qubits").value || "1"));
+  const type = (couplingSel?.value || "none").toLowerCase();
+
+  const ll = parseLayoutListStr();
+  const hashOk = ((document.getElementById("layout_for_hash")?.value || "").trim() !== "");
+  if (!ll || !Array.isArray(ll) || ll.length !== n || !hashOk) {
+    layoutMapWrap.style.display = "none";
+    return;
+  }
+
+  const physToLogical = Array.from({length: n}, () => "");
+  for (let v=0; v<n; v++){
+    const p = ll[v];
+    if (Number.isInteger(p) && p >= 0 && p < n) {
+      physToLogical[p] = `q[${v}]`;
+    }
+  }
+
+  layoutMapWrap.style.display = "block";
+  drawMapInto(layoutMapSvg, type, n, null, layoutMapNote, physToLogical);
+}
+
+function invalidateOnMapChange() {
+  const h = document.getElementById("layout_for_hash");
+  const ll = document.getElementById("layout_list_str");
+  const rq = document.getElementById("routed_qasm_str");
+  const rh = document.getElementById("routed_for_hash");
+  if (h) h.value = "";
+  if (ll) ll.value = "";
+  if (rq) rq.value = "";
+  if (rh) rh.value = "";
+}
+
+/* ============================
+   Layout UI helpers
+============================ */
+function toggleCustomLayoutRow() {
+  const layoutSelect = document.getElementById('layout_method');
+  const row = document.getElementById('custom_layout_row');
+  if (!layoutSelect || !row) return;
+  row.style.display = (layoutSelect.value === 'custom') ? 'flex' : 'none';
+}
+
+function toggleSabreHint() {
+  const sel = document.getElementById("layout_method");
+  const hint = document.getElementById("sabreLayoutHint");
+  if (!sel || !hint) return;
+  hint.style.display = (sel.value === "sabre") ? "block" : "none";
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadFromHidden();
+  ensureOpIds();
+  setTwoQStatus();
+  draw();
+  syncHidden();
+
+  setDocLinkFromSelect("layout_method", "layoutDocLink");
+  setDocLinkFromSelect("routing_method", "routingDocLink");
+
+  toggleCustomLayoutRow();
+  toggleSabreHint();
+
+  drawCouplingMap();
+  drawLayoutMapIfAvailable();
+
+  const layoutSelect = document.getElementById('layout_method');
+  if (layoutSelect) {
+    layoutSelect.addEventListener('change', toggleCustomLayoutRow);
+    layoutSelect.addEventListener('change', toggleSabreHint);
+    layoutSelect.addEventListener('change', () => setDocLinkFromSelect("layout_method", "layoutDocLink"));
+  }
+
+  const routingSelect = document.getElementById('routing_method');
+  if (routingSelect) {
+    routingSelect.addEventListener('change', () => setDocLinkFromSelect("routing_method", "routingDocLink"));
+  }
+
+  if (couplingSel) {
+    couplingSel.addEventListener("change", () => {
+      invalidateOnMapChange();
+      drawCouplingMap();
+      drawLayoutMapIfAvailable();
+    });
+  }
+
+  const nq = document.getElementById("num_qubits");
+  if (nq) {
+    nq.addEventListener("change", () => { drawCouplingMap(); drawLayoutMapIfAvailable(); });
+    nq.addEventListener("input", () => { drawCouplingMap(); drawLayoutMapIfAvailable(); });
+  }
+});
+
+/* ============================
+   Buttons: keep scroll + focus
+============================ */
+document.querySelectorAll('button[name="action"]').forEach(btn => {
+  btn.addEventListener("click", () => {
+    saveScrollY();
+
+    const act = btn.value;
+    if (["render_circuit","hide_qiskit","clear_all"].includes(act)) setFocus("editor");
+    else if (["apply_layout","compare_layout","clear_layout"].includes(act)) setFocus("layout");
+    else if (["apply_routing","compare_routing","clear_routing"].includes(act)) setFocus("routing");
+    else if (["apply_translation","clear_translation"].includes(act)) setFocus("translation");
+
+    syncHidden();
+
+    if (act === "clear_all") {
+      clearAllLocal();
+    }
+  });
+});
+
+document.getElementById("mainForm").addEventListener("submit", () => {
+  saveScrollY();
+  syncHidden();
+});
+
+/* ============================
+   Save / Load QASM
+============================ */
+
+function qasmFromBuilderState() {
+  const opsSorted = [...ops].sort((a,b) => {
+    const ca = (a.col ?? 0), cb = (b.col ?? 0);
+    if (ca !== cb) return ca - cb;
+    const ga = (a.gate || ""), gb = (b.gate || "");
+    if (ga !== gb) return ga.localeCompare(gb);
+    const qa = (a.qubits?.[0] ?? 0), qb = (b.qubits?.[0] ?? 0);
+    return qa - qb;
+  });
+
+  let out = [];
+  out.push('OPENQASM 2.0;');
+  out.push('include "qelib1.inc";');
+  out.push(`qreg q[${numQubits}];`);
+
+  for (const op of opsSorted) {
+    const g = (op.gate || "").toLowerCase();
+    const qs = op.qubits || [];
+    if (qs.length === 1) {
+      const q = qs[0];
+      if (g === "id") { /* no-op */ }
+      else if (g === "h") out.push(`h q[${q}];`);
+      else if (g === "x") out.push(`x q[${q}];`);
+      else if (g === "y") out.push(`y q[${q}];`);
+      else if (g === "z") out.push(`z q[${q}];`);
+      else if (g === "s") out.push(`s q[${q}];`);
+      else if (g === "sdg") out.push(`sdg q[${q}];`);
+      else if (g === "t") out.push(`t q[${q}];`);
+      else if (g === "tdg") out.push(`tdg q[${q}];`);
+      else if (g === "sx") out.push(`sx q[${q}];`);
+      else if (g === "sxdg") out.push(`sxdg q[${q}];`);
+      else throw new Error(`Unsupported gate for QASM export: ${g}`);
+    } else if (qs.length === 2) {
+      const a = qs[0], b = qs[1];
+      if (g === "cx") out.push(`cx q[${a}],q[${b}];`);
+      else if (g === "cy") out.push(`cy q[${a}],q[${b}];`);
+      else if (g === "cz") out.push(`cz q[${a}],q[${b}];`);
+      else if (g === "swap") out.push(`swap q[${a}],q[${b}];`);
+      else throw new Error(`Unsupported 2Q gate for QASM export: ${g}`);
+    }
+  }
+  return out.join("\n") + "\n";
+}
+
+function downloadText(filename, text) {
+  const blob = new Blob([text], {type: "text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const saveQasmBtn = document.getElementById("saveQasmBtn");
+if (saveQasmBtn) {
+  saveQasmBtn.addEventListener("click", () => {
+    try {
+      const qasm = qasmFromBuilderState();
+      downloadText("circuit.qasm", qasm);
+    } catch (e) {
+      alert(`Save failed: ${e?.message || e}`);
+    }
+  });
+}
+
+const loadQasmBtn = document.getElementById("loadQasmBtn");
+const qasmFileInput = document.getElementById("qasmFileInput");
+
+if (loadQasmBtn && qasmFileInput) {
+  loadQasmBtn.addEventListener("click", () => qasmFileInput.click());
+
+  qasmFileInput.addEventListener("change", () => {
+    if (!qasmFileInput.files || qasmFileInput.files.length === 0) return;
+
+    saveScrollY();
+    setFocus("editor");
+    syncHidden();
+
+    let act = document.getElementById("action_hidden_load_qasm");
+    if (!act) {
+      act = document.createElement("input");
+      act.type = "hidden";
+      act.name = "action";
+      act.id = "action_hidden_load_qasm";
+      act.value = "load_qasm";
+      document.getElementById("mainForm").appendChild(act);
+    } else {
+      act.value = "load_qasm";
+    }
+
+    document.getElementById("mainForm").submit();
+  });
+}
+
+(function(){
+  const overlay = document.getElementById("processingOverlay");
+  const form = document.getElementById("mainForm");
+  if (!overlay || !form) return;
+
+  let timer = null;
+
+  function showOverlay(){
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+  }
+
+  function hideOverlay(){
+    overlay.classList.remove("show");
+    overlay.setAttribute("aria-hidden", "true");
+  }
+
+  // On page load, ensure hidden (in case of bfcache)
+  window.addEventListener("pageshow", () => {
+    hideOverlay();
+    if (timer) { clearTimeout(timer); timer = null; }
+  });
+
+  // If user navigates away, we can keep it (optional); but safer to clear on unload
+  window.addEventListener("pagehide", () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+  });
+
+  // Start delayed loader on any submit
+  form.addEventListener("submit", () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(showOverlay, 2000);
+  });
+
+  // Also handle clicks on submit buttons (in case something prevents submit)
+  document.querySelectorAll('button[name="action"]').forEach(btn => {
+    btn.addEventListener("click", () => {
+      // some actions are instant client-side (clear_all does local clear)
+      // show loader only for server-side work
+      const act = btn.value || "";
+      const skip = ["clear_all"].includes(act);
+      if (skip) return;
+
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(showOverlay, 2000);
+    });
+  });
+})();
+
+
+</script>
+
+</body>
+</html>
