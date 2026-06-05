@@ -2480,4 +2480,175 @@ def api_chat():
 
 
 if __name__ == "__main__":
+    # ============================================================
+    # Gemini chat API
+    # Deve stare PRIMA di: if __name__ == "__main__":
+    # ============================================================
+
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+
+        _gemini_api_key = os.getenv("GEMINI_API_KEY")
+        _gemini_client = genai.Client(api_key=_gemini_api_key) if _gemini_api_key else None
+    except Exception:
+        _gemini_client = None
+
+
+    TUTOR_SYSTEM_PROMPT = """Sei un tutor esperto di traspilazione di circuiti quantistici Qiskit.
+    Stai aiutando uno studente universitario a capire come funziona la traspilazione, non solo a ricevere risposte.
+
+    Linee guida:
+    - Rispondi in modo chiaro e breve.
+    - Se la domanda è concettuale, puoi spiegare passo passo.
+    - Se la domanda riguarda il circuito o il routing, usa il contesto fornito.
+    - Non inventare dati non presenti nel contesto.
+    - Non usare Markdown pesante.
+    """
+
+
+    def _build_context_block(ctx: dict) -> str:
+        """Compatta il context inviato dal frontend in un blocco testuale."""
+        if not ctx:
+            return "(Nessun contesto disponibile.)"
+
+        lines = []
+
+        section_labels = {
+            "editor": "sta lavorando sull'editor del circuito",
+            "target": "sta scegliendo il coupling map",
+            "layout": "sta lavorando sul layout stage",
+            "routing": "sta lavorando sul routing stage",
+            "translation": "sta lavorando sulla traduzione",
+        }
+
+        sec = ctx.get("section")
+        if sec:
+            lines.append(f"Sezione corrente: lo studente {section_labels.get(sec, sec)}.")
+
+        if ctx.get("num_qubits"):
+            lines.append(f"Numero di qubit: {ctx['num_qubits']}.")
+
+        if ctx.get("coupling_map"):
+            lines.append(f"Coupling map scelto: {ctx['coupling_map']}.")
+
+        if ctx.get("layout_method"):
+            lines.append(f"Metodo di layout scelto: {ctx['layout_method']}.")
+
+        if ctx.get("routing_method"):
+            lines.append(f"Metodo di routing scelto: {ctx['routing_method']}.")
+
+        if ctx.get("translation_basis"):
+            lines.append(f"Basis di traduzione scelto: {ctx['translation_basis']}.")
+
+        if ctx.get("circuit_text"):
+            lines.append(f"\nCircuito originale dello studente:\n{ctx['circuit_text']}")
+
+        if ctx.get("layout_pairs"):
+            lines.append(f"\nLayout applicato, logico -> fisico: {ctx['layout_pairs']}")
+
+        if "routed_swap_count" in ctx:
+            lines.append(f"\nDopo il routing: {ctx['routed_swap_count']} gate SWAP inseriti.")
+
+        if "routed_depth" in ctx:
+            lines.append(f"Depth dopo il routing: {ctx['routed_depth']}.")
+
+        if ctx.get("routed_text"):
+            lines.append(f"\nCircuito dopo il routing:\n{ctx['routed_text']}")
+
+        return "\n".join(lines)
+
+
+    @app.route("/api/chat", methods=["POST"])
+    def api_chat():
+        """
+        Endpoint per il tutor contestuale con Gemini.
+
+        Riceve JSON:
+        {
+            "messages": [{"role": "user", "content": "..."}],
+            "context": {...}
+        }
+
+        Risponde JSON:
+        {
+            "reply": "...",
+            "error": false
+        }
+        """
+
+        if _gemini_client is None:
+            return jsonify({
+                "reply": "Il tutor non è configurato. Verifica che GEMINI_API_KEY sia impostata su Vercel e che google-genai sia in requirements.txt.",
+                "error": True,
+            })
+
+        try:
+            data = request.get_json(silent=True) or {}
+            client_messages = data.get("messages", []) or []
+            context = data.get("context", {}) or {}
+
+            if not isinstance(client_messages, list):
+                return jsonify({
+                    "reply": "Formato messaggi non valido.",
+                    "error": True,
+                })
+
+            ctx_block = _build_context_block(context)
+
+            prompt_parts = []
+            prompt_parts.append(TUTOR_SYSTEM_PROMPT)
+            prompt_parts.append("\nCONTESTO CORRENTE:\n" + ctx_block)
+            prompt_parts.append("\nCONVERSAZIONE:")
+
+            recent = client_messages[-20:]
+
+            for m in recent:
+                if not isinstance(m, dict):
+                    continue
+
+                role = m.get("role", "")
+                content = (m.get("content", "") or "").strip()
+
+                if not content:
+                    continue
+
+                if len(content) > 4000:
+                    content = content[:4000] + "..."
+
+                if role == "user":
+                    prompt_parts.append(f"\nStudente: {content}")
+                elif role == "assistant":
+                    prompt_parts.append(f"\nTutor: {content}")
+
+            prompt_parts.append("\nTutor:")
+
+            final_prompt = "\n".join(prompt_parts)
+
+            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+            response = _gemini_client.models.generate_content(
+                model=model,
+                contents=final_prompt,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.4,
+                    max_output_tokens=600,
+                ),
+            )
+
+            reply = (getattr(response, "text", "") or "").strip()
+
+            if not reply:
+                reply = "(Risposta vuota dal modello. Riprova.)"
+
+            return jsonify({
+                "reply": reply,
+                "error": False,
+            })
+
+        except Exception as e:
+            return jsonify({
+                "reply": f"Errore Gemini: {type(e).__name__}: {e}",
+                "error": True,
+            })
     app.run(debug=True)
