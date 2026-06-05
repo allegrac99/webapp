@@ -3,3 +3,19 @@ gemini-2.5-flash (10 richieste/minuto, 250 al giorno — più che sufficiente pe
 API KEY Gemini:
 https://aistudio.google.com/api-keys?project=allegraccc
 
+git init
+git add .
+git status
+git commit -m "..."
+
+Crea repository su Github
+
+git remote add origin https://github.com/allegrac99/webapp.git
+git branch -M main
+git push -u origin main
+
+Vai su Vercel
+New project
+Import from Github
+Variabili d'ambiente
+

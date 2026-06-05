@@ -1,4 +1,0 @@
-rl time average: 0.2953540410995483
-greedy time average: 0.018348607063293457
-ag time average: 0.006754498958587646
-sat time average: 14.96348472070694
