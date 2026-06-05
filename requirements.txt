@@ -6,4 +6,4 @@ protobuf==7.35.0
 python-dotenv==1.2.2
 qiskit==2.4.0
 z3==0.2.0
-sb3_contrib==2.8.0
+google-genai
