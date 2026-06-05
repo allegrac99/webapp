@@ -122,8 +122,8 @@ def add_project_root_to_sys_path(current_file, target_subdir):
 
 
 add_project_root_to_sys_path(__file__, 'RL')
-'''from RL.synthesis_env import SynthesisEnv
-from RL.synthesize import *'''
+from RL.synthesis_env import SynthesisEnv
+from RL.synthesize import *
 
 
 app = Flask(__name__)
