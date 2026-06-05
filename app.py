@@ -122,19 +122,82 @@ def add_project_root_to_sys_path(current_file, target_subdir):
 
 
 add_project_root_to_sys_path(__file__, 'RL')
-from RL.synthesis_env import SynthesisEnv
-from RL.synthesize import *
+'''from RL.synthesis_env import SynthesisEnv
+from RL.synthesize import *'''
 
 
 app = Flask(__name__)
 app.secret_key = "change-this-secret-key"
 
 try:
-    from openai import OpenAI
-    _openai_api_key = os.getenv("OPENAI_API_KEY")
-    _openai_client = OpenAI(api_key=_openai_api_key) if _openai_api_key else None
+    from google import genai
+    from google.genai import types as genai_types
+
+    _gemini_api_key = os.getenv("GEMINI_API_KEY")
+    _gemini_client = genai.Client(api_key=_gemini_api_key) if _gemini_api_key else None
 except Exception:
-    _openai_client = None
+    _gemini_client = None
+    genai_types = None
+
+
+def _gemini_is_configured() -> bool:
+    return _gemini_client is not None and genai_types is not None
+
+
+def _gemini_generate_text(
+    system_instruction: str,
+    user_prompt: str,
+    temperature: float = 0.2,
+    max_output_tokens: int = 700,
+) -> str:
+    """
+    Calls Gemini and returns plain text.
+    Uses GEMINI_API_KEY and optional GEMINI_MODEL from environment variables.
+    """
+    if not _gemini_is_configured():
+        raise RuntimeError("Gemini not configured. Missing GEMINI_API_KEY or google-genai.")
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    response = _gemini_client.models.generate_content(
+        model=model,
+        contents=[
+            {
+                "role": "user",
+                "parts": [{"text": user_prompt}],
+            }
+        ],
+        config=genai_types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+        ),
+    )
+
+    reply = (response.text or "").strip() if hasattr(response, "text") else ""
+    if reply:
+        return reply
+
+    try:
+        finish_reason = str(response.candidates[0].finish_reason)
+    except Exception:
+        finish_reason = "unknown"
+
+    raise RuntimeError(f"Empty Gemini response. Finish reason: {finish_reason}")
+
+
+def _gemini_error_message(e: Exception) -> str:
+    msg = str(e)
+    lower = msg.lower()
+
+    if "api_key" in lower or "api key" in lower or "unauthenticated" in lower or "401" in msg:
+        return "Gemini not configured (invalid or missing GEMINI_API_KEY)."
+    if "resource_exhausted" in lower or "429" in msg or "rate" in lower or "quota" in lower:
+        return "Gemini analysis unavailable: rate limit or quota exceeded."
+    if "not found" in lower or ("model" in lower and "404" in msg):
+        return "Gemini analysis unavailable: model not found or not accessible."
+    if "timeout" in lower or "network" in lower:
+        return "Gemini analysis unavailable: network error or timeout."
+    return f"Gemini analysis unavailable: {type(e).__name__}: {e}"
 
 def format_clifford_tableau_bool(cliff: Clifford) -> str:
     import numpy as np
@@ -144,9 +207,10 @@ def format_clifford_tableau_bool(cliff: Clifford) -> str:
 
 
 def generate_routing_analysis(original_text: str, routed_text: str, original_qasm: str | None = None, routed_qasm: str | None = None) -> str:
-    if _openai_client is None:
-        return "ChatGPT not configured (missing library or API key)."
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    if not _gemini_is_configured():
+        return "Gemini not configured (missing library or GEMINI_API_KEY)."
+
+    system_instruction = "You are an expert in Qiskit transpilation and routing on coupling maps."
     user_prompt = (
         "You are a quantum circuit routing assistant. "
         "Analyze differences between the original and the routed circuits."
@@ -162,25 +226,16 @@ def generate_routing_analysis(original_text: str, routed_text: str, original_qas
         + "[Routed circuit - ASCII]\n" + (routed_text or "(n/a)") + "\n\n"
         + ("[Routed circuit - QASM]\n" + routed_qasm + "\n\n" if routed_qasm else "")
     )
+
     try:
-        resp = _openai_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are an expert in Qiskit transpilation and routing on coupling maps."},
-                {"role": "user", "content": user_prompt},
-            ],
+        return _gemini_generate_text(
+            system_instruction=system_instruction,
+            user_prompt=user_prompt,
             temperature=0.2,
+            max_output_tokens=700,
         )
-        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        msg = str(e)
-        if ("401" in msg) or ("Unauthorized" in msg) or ("api_key" in msg):
-            return "ChatGPT not configured (invalid or missing OPENAI_API_KEY)."
-        if ("404" in msg) or (("model" in msg) and ("not found" in msg)):
-            return "ChatGPT analysis unavailable: model not found or not accessible."
-        if ("timeout" in msg) or ("network" in msg):
-            return "ChatGPT analysis unavailable: network error or timeout."
-        return f"ChatGPT analysis unavailable: {type(e).__name__}: {e}"
+        return _gemini_error_message(e)
 
 def generate_synthesis_comparison_analysis(
     operator_kind: str,
@@ -197,12 +252,9 @@ def generate_synthesis_comparison_analysis(
       - docs (str or "")
       - error (str or None)
     """
-    if _openai_client is None:
-        return "ChatGPT not configured (missing library or API key)."
+    if not _gemini_is_configured():
+        return "Gemini not configured (missing library or GEMINI_API_KEY)."
 
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-
-    # Build a compact, structured prompt (no markdown requested)
     blocks = []
     blocks.append(f"Operator ({operator_kind}):\n{operator_payload}\n")
 
@@ -233,8 +285,9 @@ def generate_synthesis_comparison_analysis(
         if qasm:
             blocks.append("[Circuit - QASM]")
             blocks.append(qasm.strip())
-        blocks.append("")  # spacer
+        blocks.append("")
 
+    system_instruction = "You are an expert in Qiskit Clifford synthesis and circuit optimization."
     user_prompt = (
         "You are a quantum circuit synthesis comparison assistant.\n"
         "Given the same Clifford operator and the synthesized circuits produced by different methods,\n"
@@ -251,24 +304,14 @@ def generate_synthesis_comparison_analysis(
     )
 
     try:
-        resp = _openai_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are an expert in Qiskit Clifford synthesis and circuit optimization."},
-                {"role": "user", "content": user_prompt},
-            ],
+        return _gemini_generate_text(
+            system_instruction=system_instruction,
+            user_prompt=user_prompt,
             temperature=0.2,
+            max_output_tokens=800,
         )
-        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        msg = str(e)
-        if ("401" in msg) or ("Unauthorized" in msg) or ("api_key" in msg):
-            return "ChatGPT not configured (invalid or missing OPENAI_API_KEY)."
-        if ("404" in msg) or (("model" in msg) and ("not found" in msg)):
-            return "ChatGPT analysis unavailable: model not found or not accessible."
-        if ("timeout" in msg) or ("network" in msg):
-            return "ChatGPT analysis unavailable: network error or timeout."
-        return f"ChatGPT analysis unavailable: {type(e).__name__}: {e}"
+        return _gemini_error_message(e)
 
 def generate_routing_comparison_analysis(
     original_text: str,
@@ -284,10 +327,8 @@ def generate_routing_comparison_analysis(
       - circuit_text (str)
       - circuit_text_cx (str or None)
     """
-    if _openai_client is None:
-        return "ChatGPT not configured (missing library or API key)."
-
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    if not _gemini_is_configured():
+        return "Gemini not configured (missing library or GEMINI_API_KEY)."
 
     blocks = []
     blocks.append("[Original circuit - ASCII]\n" + (original_text or "(n/a)") + "\n")
@@ -302,7 +343,6 @@ def generate_routing_comparison_analysis(
         txt_obj = item.get("circuit_text") or ""
         txt = str(txt_obj).strip()
 
-
         blocks.append(f"=== ROUTING METHOD: {m} ===")
         if docs:
             blocks.append(f"Docs: {docs}")
@@ -315,6 +355,7 @@ def generate_routing_comparison_analysis(
         blocks.append(txt if txt else "(empty)")
         blocks.append("")
 
+    system_instruction = "You are an expert in Qiskit transpilation and routing on coupling maps."
     user_prompt = (
         "You are a quantum circuit routing comparison assistant.\n"
         "Given one original circuit and multiple routed versions produced by different routing methods,\n"
@@ -330,25 +371,14 @@ def generate_routing_comparison_analysis(
     )
 
     try:
-        resp = _openai_client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are an expert in Qiskit transpilation and routing on coupling maps."},
-                {"role": "user", "content": user_prompt},
-            ],
+        return _gemini_generate_text(
+            system_instruction=system_instruction,
+            user_prompt=user_prompt,
             temperature=0.2,
+            max_output_tokens=800,
         )
-        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
-        msg = str(e)
-        if ("401" in msg) or ("Unauthorized" in msg) or ("api_key" in msg):
-            return "ChatGPT not configured (invalid or missing OPENAI_API_KEY)."
-        if ("404" in msg) or (("model" in msg) and ("not found" in msg)):
-            return "ChatGPT analysis unavailable: model not found or not accessible."
-        if ("timeout" in msg) or ("network" in msg):
-            return "ChatGPT analysis unavailable: network error or timeout."
-        return f"ChatGPT analysis unavailable: {type(e).__name__}: {e}"
-
+        return _gemini_error_message(e)
 
 DOCS = {
     "BasisTranslator": "https://quantum.cloud.ibm.com/docs/en/api/qiskit/qiskit.transpiler.passes.BasisTranslator",
@@ -2257,415 +2287,197 @@ def clifford_synthesis_view():
 
 
 
-if __name__ == "__main__":
-    '''# ============================================================
-    # chat_route_addition.py
-    #
-    # Aggiungi questo codice al tuo app.py esistente.
-    # Richiede che _openai_client sia gia' configurato (lo e' gia').
-    #
-    # Posizione consigliata: dopo le altre route (subito prima di
-    # `if __name__ == "__main__":`).
-    # ============================================================
+# ---- System prompt: definisce il tutor ----
+TUTOR_SYSTEM_PROMPT = """Sei un tutor esperto di traspilazione di circuiti quantistici Qiskit.
+Stai aiutando uno studente universitario a CAPIRE come funziona la traspilazione, non solo a ricevere risposte.
+
+Linee guida pedagogiche (importanti):
+1. Approccio socratico: se lo studente fa una domanda concettuale aperta ("perche X?", "come funziona Y?"),
+PRIMA fai una domanda di ritorno breve per stimolare il suo ragionamento, POI spiega.
+Se la domanda e' molto specifica e tecnica, rispondi direttamente.
+2. Usa SEMPRE il circuito e i dati dello studente come esempio concreto.
+Non parlare di casi generici se hai il suo contesto.
+3. Sii conciso: 3-5 frasi per risposta. Solo se chiede dettagli, espandi.
+4. Rispondi in italiano.
+5. Niente Markdown elaborato. No headers (#), no tabelle. Liste brevi con trattini ok.
+Codice inline tra backtick: `cx q[0],q[1]`.
+6. Se la domanda e' ambigua, chiedi chiarimenti invece di indovinare.
+7. Se non hai abbastanza contesto per rispondere, dillo esplicitamente.
+8. Non inventare fatti su Qiskit. Se non sei sicuro, dillo.
+
+Cosa NON fare:
+- Non essere condiscendente ("ottima domanda!", "esattamente!")
+- Non ripetere quello che lo studente ha appena detto
+- Non dare lunghe lezioni teoriche se non richieste
+- Non fornire codice Python a meno che lo studente lo chieda esplicitamente
+"""
 
 
+def _build_context_block(ctx: dict) -> str:
+    """Compatta il context inviato dal frontend in un blocco testuale."""
+    if not ctx:
+        return "(Nessun contesto disponibile.)"
 
-    # ---- System prompt: definisce il tutor ----
-    TUTOR_SYSTEM_PROMPT = """Sei un tutor esperto di traspilazione di circuiti quantistici Qiskit.
-    Stai aiutando uno studente universitario a CAPIRE come funziona la traspilazione, non solo a ricevere risposte.
+    lines = []
 
-    Linee guida pedagogiche (importanti):
-    1. Approccio socratico: se lo studente fa una domanda concettuale aperta ("perche X?", "come funziona Y?"),
-    PRIMA fai una domanda di ritorno breve per stimolare il suo ragionamento, POI spiega.
-    Se la domanda e' molto specifica e tecnica, rispondi direttamente.
-    2. Usa SEMPRE il circuito e i dati dello studente come esempio concreto.
-    Non parlare di casi generici se hai il suo contesto.
-    3. Sii conciso: 3-5 frasi per risposta. Solo se chiede dettagli, espandi.
-    4. Rispondi in italiano.
-    5. Niente Markdown elaborato. No headers (#), no tabelle. Liste brevi con trattini ok.
-    Codice inline tra backtick: `cx q[0],q[1]`.
-    6. Se la domanda e' ambigua, chiedi chiarimenti invece di indovinare.
-    7. Se non hai abbastanza contesto per rispondere, dillo esplicitamente.
-    8. Non inventare fatti su Qiskit. Se non sei sicuro, dillo.
+    section_labels = {
+        "editor": "sta lavorando sull'editor del circuito",
+        "target": "sta scegliendo il coupling map",
+        "layout": "sta lavorando sul layout stage",
+        "routing": "sta lavorando sul routing stage",
+        "translation": "sta lavorando sulla traduzione",
+    }
+    sec = ctx.get("section")
+    if sec:
+        lines.append(f"Sezione corrente: lo studente {section_labels.get(sec, sec)}.")
 
-    Cosa NON fare:
-    - Non essere condiscendente ("ottima domanda!", "esattamente!")
-    - Non ripetere quello che lo studente ha appena detto
-    - Non dare lunghe lezioni teoriche se non richieste
-    - Non fornire codice Python a meno che lo studente lo chieda esplicitamente
+    if ctx.get("num_qubits"):
+        lines.append(f"Numero di qubit: {ctx['num_qubits']}.")
+    if ctx.get("coupling_map"):
+        lines.append(f"Coupling map scelto: {ctx['coupling_map']}.")
+    if ctx.get("layout_method"):
+        lines.append(f"Metodo di layout scelto: {ctx['layout_method']}.")
+    if ctx.get("routing_method"):
+        lines.append(f"Metodo di routing scelto: {ctx['routing_method']}.")
+    if ctx.get("translation_basis"):
+        lines.append(f"Basis di traduzione scelto: {ctx['translation_basis']}.")
+
+    if ctx.get("circuit_text"):
+        lines.append(f"\nCircuito originale dello studente:\n{ctx['circuit_text']}")
+
+    if ctx.get("layout_pairs"):
+        lines.append(f"\nLayout applicato (logico -> fisico): {ctx['layout_pairs']}")
+
+    if "routed_swap_count" in ctx:
+        lines.append(f"\nDopo il routing: {ctx['routed_swap_count']} gate SWAP inseriti.")
+    if "routed_depth" in ctx:
+        lines.append(f"Depth dopo il routing: {ctx['routed_depth']}.")
+    if ctx.get("routed_text"):
+        lines.append(f"\nCircuito dopo il routing:\n{ctx['routed_text']}")
+
+    return "\n".join(lines)
+
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
     """
+    Endpoint per il tutor contestuale (Gemini backend).
 
+    Riceve JSON:
+    - messages: lista di {role, content} (storia conversazione)
+    - context:  dict con stato corrente della pagina
 
-    def _build_context_block(ctx: dict) -> str:
-        """Compatta il context inviato dal frontend in un blocco testuale."""
-        if not ctx:
-            return "(Nessun contesto disponibile.)"
+    Risponde JSON: {reply: str, error: bool}
+    """
+    if not _gemini_is_configured():
+        return jsonify({
+            "reply": "Il tutor non e' configurato. Verifica GEMINI_API_KEY nelle Environment Variables di Vercel "
+                    "e che google-genai sia installato.",
+            "error": True,
+        })
 
-        lines = []
-
-        section_labels = {
-            "editor": "sta lavorando sull'editor del circuito",
-            "target": "sta scegliendo il coupling map",
-            "layout": "sta lavorando sul layout stage",
-            "routing": "sta lavorando sul routing stage",
-            "translation": "sta lavorando sulla traduzione",
-        }
-        sec = ctx.get("section")
-        if sec:
-            lines.append(f"Sezione corrente: lo studente {section_labels.get(sec, sec)}.")
-
-        if ctx.get("num_qubits"):
-            lines.append(f"Numero di qubit: {ctx['num_qubits']}.")
-        if ctx.get("coupling_map"):
-            lines.append(f"Coupling map scelto: {ctx['coupling_map']}.")
-        if ctx.get("layout_method"):
-            lines.append(f"Metodo di layout scelto: {ctx['layout_method']}.")
-        if ctx.get("routing_method"):
-            lines.append(f"Metodo di routing scelto: {ctx['routing_method']}.")
-        if ctx.get("translation_basis"):
-            lines.append(f"Basis di traduzione scelto: {ctx['translation_basis']}.")
-
-        if ctx.get("circuit_text"):
-            lines.append(f"\nCircuito originale dello studente:\n{ctx['circuit_text']}")
-
-        if ctx.get("layout_pairs"):
-            lines.append(f"\nLayout applicato (logico -> fisico): {ctx['layout_pairs']}")
-
-        if "routed_swap_count" in ctx:
-            lines.append(f"\nDopo il routing: {ctx['routed_swap_count']} gate SWAP inseriti.")
-        if "routed_depth" in ctx:
-            lines.append(f"Depth dopo il routing: {ctx['routed_depth']}.")
-        if ctx.get("routed_text"):
-            lines.append(f"\nCircuito dopo il routing:\n{ctx['routed_text']}")
-
-        return "\n".join(lines)
-
-
-    @app.route("/api/chat", methods=["POST"])
-    def api_chat():
-        """
-        Endpoint per il tutor contestuale.
-
-        Riceve JSON con:
-        - messages: lista di {role, content} (storia conversazione)
-        - context:  dict con stato corrente della pagina (circuito, layout, ...)
-
-        Risponde con JSON: {reply: str, error: bool}
-        """
-        if _openai_client is None:
-            return jsonify({
-                "reply": "Il tutor non e' configurato. Manca la variabile d'ambiente OPENAI_API_KEY.",
-                "error": True,
-            })
-
-        try:
-            data = request.get_json(silent=True) or {}
-            client_messages = data.get("messages", []) or []
-            context = data.get("context", {}) or {}
-
-            if not isinstance(client_messages, list):
-                return jsonify({"reply": "Formato messaggi non valido.", "error": True})
-
-            # Costruisci il system prompt con il contesto
-            ctx_block = _build_context_block(context)
-            system_prompt = TUTOR_SYSTEM_PROMPT + "\n\nCONTESTO CORRENTE:\n" + ctx_block
-
-            # Sanitizza la storia: prendi solo gli ultimi 20 messaggi validi
-            oai_messages = [{"role": "system", "content": system_prompt}]
-            recent = client_messages[-20:]
-            for m in recent:
-                if not isinstance(m, dict):
-                    continue
-                role = m.get("role")
-                content = m.get("content", "")
-                if role not in ("user", "assistant"):
-                    continue
-                content = (content or "").strip()
-                if not content:
-                    continue
-                # Limite di sicurezza per evitare prompt enormi
-                if len(content) > 4000:
-                    content = content[:4000] + "... (truncated)"
-                oai_messages.append({"role": role, "content": content})
-
-            if len(oai_messages) == 1:
-                return jsonify({"reply": "Scrivi una domanda per iniziare.", "error": True})
-
-            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-            resp = _openai_client.chat.completions.create(
-                model=model,
-                messages=oai_messages,
-                temperature=0.4,
-                max_tokens=500,
-            )
-            reply = (resp.choices[0].message.content or "").strip()
-            if not reply:
-                reply = "(Risposta vuota dal modello. Riprova.)"
-
-            return jsonify({"reply": reply, "error": False})
-
-        except Exception as e:
-            msg = str(e)
-            if "401" in msg or "Unauthorized" in msg or "api_key" in msg.lower():
-                return jsonify({
-                    "reply": "API key OpenAI invalida o mancante.",
-                    "error": True,
-                })
-            if "429" in msg or "rate" in msg.lower():
-                return jsonify({
-                    "reply": "Rate limit raggiunto. Riprova tra qualche secondo.",
-                    "error": True,
-                })
-            return jsonify({
-                "reply": f"Errore: {type(e).__name__}: {e}",
-                "error": True,
-            })'''
-    
-    # ============================================================
-    # chat_route_addition.py  (versione Gemini)
-    #
-    # Sostituisce la versione OpenAI con Google Gemini API.
-    #
-    # Setup richiesto:
-    # 1. Installa la libreria (nel tuo conda env "webapp"):
-    #       python -m pip install google-genai
-    #
-    # 2. Crea una API key gratuita su:
-    #       https://aistudio.google.com/apikey
-    #    (Login con Google, niente carta di credito richiesta)
-    #
-    # 3. Aggiungi al file .env (nella stessa cartella di app.py):
-    #       GEMINI_API_KEY="la-tua-chiave"
-    #       GEMINI_MODEL="gemini-2.5-flash"
-    #
-    # 4. Riavvia Flask: python app.py
-    #
-    # Modelli disponibili sul free tier (dicembre 2026):
-    #   - gemini-2.5-flash       (10 RPM, 250 req/giorno)  <- consigliato
-    #   - gemini-2.5-flash-lite  (15 RPM, 1000 req/giorno) <- piu' veloce, qualita' un po' inferiore
-    #   - gemini-2.5-pro         (5 RPM, 50 req/giorno)    <- molto limitato sul free tier
-    #
-    # Aggiungi questo codice al tuo app.py esistente, prima di
-    # `if __name__ == "__main__":`.
-    # ============================================================
-
-
-    # ---- Inizializzazione client Gemini ----
     try:
-        from google import genai
-        from google.genai import types as genai_types
-        _gemini_api_key = os.getenv("GEMINI_API_KEY")
-        _gemini_client = genai.Client(api_key=_gemini_api_key) if _gemini_api_key else None
-    except Exception:
-        _gemini_client = None
-        genai_types = None
+        data = request.get_json(silent=True) or {}
+        client_messages = data.get("messages", []) or []
+        context = data.get("context", {}) or {}
 
+        if not isinstance(client_messages, list):
+            return jsonify({"reply": "Formato messaggi non valido.", "error": True})
 
-    # ---- System prompt: definisce il tutor ----
-    TUTOR_SYSTEM_PROMPT = """Sei un tutor esperto di traspilazione di circuiti quantistici Qiskit.
-    Stai aiutando uno studente universitario a CAPIRE come funziona la traspilazione, non solo a ricevere risposte.
+        ctx_block = _build_context_block(context)
+        system_instruction = TUTOR_SYSTEM_PROMPT + "\n\nCONTESTO CORRENTE:\n" + ctx_block
 
-    Linee guida pedagogiche (importanti):
-    1. Approccio socratico: se lo studente fa una domanda concettuale aperta ("perche X?", "come funziona Y?"),
-    PRIMA fai una domanda di ritorno breve per stimolare il suo ragionamento, POI spiega.
-    Se la domanda e' molto specifica e tecnica, rispondi direttamente.
-    2. Usa SEMPRE il circuito e i dati dello studente come esempio concreto.
-    Non parlare di casi generici se hai il suo contesto.
-    3. Sii conciso: 3-5 frasi per risposta. Solo se chiede dettagli, espandi.
-    4. Rispondi in italiano.
-    5. Niente Markdown elaborato. No headers (#), no tabelle. Liste brevi con trattini ok.
-    Codice inline tra backtick: `cx q[0],q[1]`.
-    6. Se la domanda e' ambigua, chiedi chiarimenti invece di indovinare.
-    7. Se non hai abbastanza contesto per rispondere, dillo esplicitamente.
-    8. Non inventare fatti su Qiskit. Se non sei sicuro, dillo.
+        gemini_contents = []
+        recent = client_messages[-20:]
+        for m in recent:
+            if not isinstance(m, dict):
+                continue
+            role = m.get("role")
+            content = (m.get("content") or "").strip()
+            if not content:
+                continue
 
-    Cosa NON fare:
-    - Non essere condiscendente ("ottima domanda!", "esattamente!")
-    - Non ripetere quello che lo studente ha appena detto
-    - Non dare lunghe lezioni teoriche se non richieste
-    - Non fornire codice Python a meno che lo studente lo chieda esplicitamente
-    """
+            if role == "user":
+                gemini_role = "user"
+            elif role == "assistant":
+                gemini_role = "model"
+            else:
+                continue
 
+            if len(content) > 4000:
+                content = content[:4000] + "... (truncated)"
 
-    def _build_context_block(ctx: dict) -> str:
-        """Compatta il context inviato dal frontend in un blocco testuale."""
-        if not ctx:
-            return "(Nessun contesto disponibile.)"
+            gemini_contents.append({
+                "role": gemini_role,
+                "parts": [{"text": content}],
+            })
 
-        lines = []
+        if not gemini_contents:
+            return jsonify({"reply": "Scrivi una domanda per iniziare.", "error": True})
 
-        section_labels = {
-            "editor": "sta lavorando sull'editor del circuito",
-            "target": "sta scegliendo il coupling map",
-            "layout": "sta lavorando sul layout stage",
-            "routing": "sta lavorando sul routing stage",
-            "translation": "sta lavorando sulla traduzione",
-        }
-        sec = ctx.get("section")
-        if sec:
-            lines.append(f"Sezione corrente: lo studente {section_labels.get(sec, sec)}.")
+        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        response = _gemini_client.models.generate_content(
+            model=model,
+            contents=gemini_contents,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.4,
+                max_output_tokens=500,
+            ),
+        )
 
-        if ctx.get("num_qubits"):
-            lines.append(f"Numero di qubit: {ctx['num_qubits']}.")
-        if ctx.get("coupling_map"):
-            lines.append(f"Coupling map scelto: {ctx['coupling_map']}.")
-        if ctx.get("layout_method"):
-            lines.append(f"Metodo di layout scelto: {ctx['layout_method']}.")
-        if ctx.get("routing_method"):
-            lines.append(f"Metodo di routing scelto: {ctx['routing_method']}.")
-        if ctx.get("translation_basis"):
-            lines.append(f"Basis di traduzione scelto: {ctx['translation_basis']}.")
+        reply = (response.text or "").strip() if hasattr(response, "text") else ""
 
-        if ctx.get("circuit_text"):
-            lines.append(f"\nCircuito originale dello studente:\n{ctx['circuit_text']}")
+        if not reply:
+            try:
+                finish_reason = str(response.candidates[0].finish_reason)
+            except Exception:
+                finish_reason = ""
 
-        if ctx.get("layout_pairs"):
-            lines.append(f"\nLayout applicato (logico -> fisico): {ctx['layout_pairs']}")
-
-        if "routed_swap_count" in ctx:
-            lines.append(f"\nDopo il routing: {ctx['routed_swap_count']} gate SWAP inseriti.")
-        if "routed_depth" in ctx:
-            lines.append(f"Depth dopo il routing: {ctx['routed_depth']}.")
-        if ctx.get("routed_text"):
-            lines.append(f"\nCircuito dopo il routing:\n{ctx['routed_text']}")
-
-        return "\n".join(lines)
-
-
-    @app.route("/api/chat", methods=["POST"])
-    def api_chat():
-        """
-        Endpoint per il tutor contestuale (Gemini backend).
-
-        Riceve JSON:
-        - messages: lista di {role, content} (storia conversazione)
-        - context:  dict con stato corrente della pagina
-
-        Risponde JSON: {reply: str, error: bool}
-        """
-        if _gemini_client is None:
+            if "SAFETY" in finish_reason.upper():
+                return jsonify({
+                    "reply": "La risposta e' stata bloccata dai filtri di sicurezza di Gemini. Prova a riformulare la domanda.",
+                    "error": True,
+                })
+            if "MAX_TOKENS" in finish_reason.upper():
+                return jsonify({
+                    "reply": "Risposta troncata per limite di lunghezza. Riprova chiedendo qualcosa di piu' specifico.",
+                    "error": True,
+                })
             return jsonify({
-                "reply": "Il tutor non e' configurato. Verifica GEMINI_API_KEY nel file .env "
-                        "e che google-genai sia installato.",
+                "reply": f"(Risposta vuota. Motivo: {finish_reason or 'sconosciuto'}.)",
                 "error": True,
             })
 
-        try:
-            data = request.get_json(silent=True) or {}
-            client_messages = data.get("messages", []) or []
-            context = data.get("context", {}) or {}
+        return jsonify({"reply": reply, "error": False})
 
-            if not isinstance(client_messages, list):
-                return jsonify({"reply": "Formato messaggi non valido.", "error": True})
+    except Exception as e:
+        msg = str(e)
+        lower = msg.lower()
 
-            # Costruisci il system instruction con il contesto
-            ctx_block = _build_context_block(context)
-            system_instruction = TUTOR_SYSTEM_PROMPT + "\n\nCONTESTO CORRENTE:\n" + ctx_block
-
-            # Converti la storia in formato Gemini:
-            # - role "assistant" -> "model"
-            # - content -> parts: [{text: "..."}]
-            # - limite a ultimi 20 messaggi
-            gemini_contents = []
-            recent = client_messages[-20:]
-            for m in recent:
-                if not isinstance(m, dict):
-                    continue
-                role = m.get("role")
-                content = (m.get("content") or "").strip()
-                if not content:
-                    continue
-
-                if role == "user":
-                    gemini_role = "user"
-                elif role == "assistant":
-                    gemini_role = "model"
-                else:
-                    continue
-
-                # Limite di sicurezza per evitare prompt enormi
-                if len(content) > 4000:
-                    content = content[:4000] + "... (truncated)"
-
-                gemini_contents.append({
-                    "role": gemini_role,
-                    "parts": [{"text": content}],
-                })
-
-            if not gemini_contents:
-                return jsonify({"reply": "Scrivi una domanda per iniziare.", "error": True})
-
-            # Chiama il modello
-            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-            response = _gemini_client.models.generate_content(
-                model=model,
-                contents=gemini_contents,
-                config=genai_types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0.4,
-                    max_output_tokens=500,
-                ),
-            )
-
-            # Estrai la risposta. Gemini puo' bloccare per safety filters:
-            # in quel caso response.text e' vuoto e response.candidates[0].finish_reason
-            # contiene il motivo.
-            reply = (response.text or "").strip() if hasattr(response, "text") else ""
-
-            if not reply:
-                try:
-                    finish_reason = str(response.candidates[0].finish_reason)
-                except Exception:
-                    finish_reason = ""
-
-                if "SAFETY" in finish_reason.upper():
-                    return jsonify({
-                        "reply": "La risposta e' stata bloccata dai filtri di sicurezza di Gemini. "
-                                "Prova a riformulare la domanda.",
-                        "error": True,
-                    })
-                if "MAX_TOKENS" in finish_reason.upper():
-                    return jsonify({
-                        "reply": "Risposta troncata per limite di lunghezza. Riprova chiedendo qualcosa di piu' specifico.",
-                        "error": True,
-                    })
-                return jsonify({
-                    "reply": f"(Risposta vuota. Motivo: {finish_reason or 'sconosciuto'}.)",
-                    "error": True,
-                })
-
-            return jsonify({"reply": reply, "error": False})
-
-        except Exception as e:
-            msg = str(e)
-            lower = msg.lower()
-
-            # API key mancante o invalida
-            if "api_key" in lower or "api key" in lower or "unauthenticated" in lower or "401" in msg:
-                return jsonify({
-                    "reply": "API key Gemini invalida o mancante. Controlla GEMINI_API_KEY nel .env "
-                            "e verifica su https://aistudio.google.com/apikey",
-                    "error": True,
-                })
-
-            # Rate limit / quota (Gemini usa RESOURCE_EXHAUSTED)
-            if "resource_exhausted" in lower or "429" in msg or "rate" in lower or "quota" in lower:
-                return jsonify({
-                    "reply": "Limite di richieste Gemini raggiunto. Il free tier ha 10 richieste/minuto "
-                            "e 250 al giorno. Aspetta un minuto e riprova.",
-                    "error": True,
-                })
-
-            # Modello non trovato
-            if "not found" in lower or ("model" in lower and "404" in msg):
-                return jsonify({
-                    "reply": f"Modello Gemini non disponibile. Verifica GEMINI_MODEL nel .env. "
-                            f"Errore: {e}",
-                    "error": True,
-                })
-
+        if "api_key" in lower or "api key" in lower or "unauthenticated" in lower or "401" in msg:
             return jsonify({
-                "reply": f"Errore: {type(e).__name__}: {e}",
+                "reply": "API key Gemini invalida o mancante. Controlla GEMINI_API_KEY su Vercel.",
                 "error": True,
             })
+
+        if "resource_exhausted" in lower or "429" in msg or "rate" in lower or "quota" in lower:
+            return jsonify({
+                "reply": "Limite di richieste Gemini raggiunto. Aspetta un minuto e riprova.",
+                "error": True,
+            })
+
+        if "not found" in lower or ("model" in lower and "404" in msg):
+            return jsonify({
+                "reply": f"Modello Gemini non disponibile. Verifica GEMINI_MODEL. Errore: {e}",
+                "error": True,
+            })
+
+        return jsonify({
+            "reply": f"Errore: {type(e).__name__}: {e}",
+            "error": True,
+        })
+
+
+if __name__ == "__main__":
     app.run(debug=True)
